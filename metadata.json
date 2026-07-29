@@ -1,0 +1,6 @@
+{
+  "name": "國小線上英語練習測驗",
+  "description": "專為國小生設計的線上英語練習與測驗平台，包含低/中/高年級單字、句型測驗、聽力練習、錯題本與 AI 英文小老師診斷說明。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
