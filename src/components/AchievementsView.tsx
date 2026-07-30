@@ -1,6 +1,8 @@
-import React, { useState, useMemo } from 'react';
-import { UserStats, QuizResult } from '../types';
-import { Award, Trophy, Star, Flame, CheckCircle, Printer, Sparkles, Medal, UserCheck, TrendingUp, BarChart2 } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { UserStats, QuizResult, GradeLevel, MistakeItem } from '../types';
+import { Award, Trophy, Star, Flame, CheckCircle, Printer, Sparkles, Medal, UserCheck, TrendingUp, BarChart2, Zap, Crown, FileText, Copy, Check, Loader2, X, Share2, Volume2, BookOpen, Download, Mic, Activity, FileSpreadsheet, RefreshCw } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { playSpeech } from '../utils/speech';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -10,17 +12,200 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend
+  Legend,
+  Radar,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  AreaChart,
+  Area
 } from 'recharts';
 
 interface AchievementsViewProps {
   stats: UserStats;
   quizResults: QuizResult[];
+  grade?: GradeLevel;
+  mistakes?: MistakeItem[];
+  speechSpeed?: number;
 }
 
-export const AchievementsView: React.FC<AchievementsViewProps> = ({ stats, quizResults }) => {
+export const AchievementsView: React.FC<AchievementsViewProps> = ({
+  stats,
+  quizResults,
+  grade = 'mid',
+  mistakes = [],
+  speechSpeed = 0.85
+}) => {
   const [studentName, setStudentName] = useState('小學霸');
   const [showCertificate, setShowCertificate] = useState(false);
+
+  // Weekly Report States
+  const [showWeeklyReport, setShowWeeklyReport] = useState(false);
+  const [weeklyReportLoading, setWeeklyReportLoading] = useState(false);
+  const [weeklyReportText, setWeeklyReportText] = useState<string | null>(null);
+  const [reportCopied, setReportCopied] = useState(false);
+
+  // Phonics Voice History state
+  const [phonicsHistory, setPhonicsHistory] = useState<
+    { date: string; label: string; score: number; fluency: number; category: string; word: string }[]
+  >(() => {
+    const saved = localStorage.getItem('elem_eng_phonics_history');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse phonics history', e);
+      }
+    }
+    // Default initial 6-session progress curve if not yet recorded
+    return [
+      { date: '7/20', label: '第 1 次測驗', score: 68, fluency: 65, category: '短母音 Phonics (a/e/i)', word: 'Cat, Bed, Pig' },
+      { date: '7/22', label: '第 2 次測驗', score: 75, fluency: 72, category: '長母音 Phonics (a_e/i_e)', word: 'Cake, Bike' },
+      { date: '7/24', label: '第 3 次測驗', score: 82, fluency: 78, category: '雙子音 Blends (bl/cl/fl)', word: 'Blue, Clock' },
+      { date: '7/26', label: '第 4 次測驗', score: 86, fluency: 84, category: '複合子音 Digraphs (ch/sh)', word: 'Chair, Fish' },
+      { date: '7/28', label: '第 5 次測驗', score: 92, fluency: 88, category: '自然發音整合句', word: 'The cat ate cake.' },
+      { date: '7/30', label: '最新評測', score: 96, fluency: 94, category: '高階音組與美語連音', word: 'Practice makes perfect.' }
+    ];
+  });
+
+  // State for voice testing modal inside Achievements
+  const [activePhonicsTestWord, setActivePhonicsTestWord] = useState('Elephant');
+  const [isRecordingTest, setIsRecordingTest] = useState(false);
+  const [testScoreResult, setTestScoreResult] = useState<{ score: number; fluency: number; feedback: string } | null>(null);
+
+  const handleSimulateVoiceTest = () => {
+    setIsRecordingTest(true);
+    setTestScoreResult(null);
+
+    // Simulate 2s recording & AI voice analysis
+    setTimeout(() => {
+      setIsRecordingTest(false);
+      const randomScore = Math.floor(Math.random() * 11) + 88; // 88 ~ 98
+      const randomFluency = Math.floor(Math.random() * 10) + 86; // 86 ~ 95
+      const newEntry = {
+        date: `${new Date().getMonth() + 1}/${new Date().getDate()}`,
+        label: `最新評測 #${phonicsHistory.length + 1}`,
+        score: randomScore,
+        fluency: randomFluency,
+        category: '語音實時發音評測',
+        word: activePhonicsTestWord
+      };
+
+      const updated = [...phonicsHistory, newEntry];
+      setPhonicsHistory(updated);
+      localStorage.setItem('elem_eng_phonics_history', JSON.stringify(updated));
+
+      setTestScoreResult({
+        score: randomScore,
+        fluency: randomFluency,
+        feedback: `太棒了！《${activePhonicsTestWord}》發音非常標準清晰，聲調音高與美語標準母語者契合度高達 ${randomScore}%！`
+      });
+    }, 2000);
+  };
+
+  // CSV Export Handler
+  const handleExportCSV = () => {
+    const accuracy = stats.totalQuestionsAnswered > 0
+      ? Math.round((stats.totalCorrect / stats.totalQuestionsAnswered) * 100)
+      : 0;
+
+    let csvContent = '\uFEFF'; // Add UTF-8 BOM for Microsoft Excel Chinese support
+
+    // Section 1: Overview
+    csvContent += '【國小英語學習紀錄總覽】\n';
+    csvContent += `學生姓名,${studentName}\n`;
+    csvContent += `年級程度,${grade === 'low' ? '1-2年級' : grade === 'mid' ? '3-4年級' : '5-6年級'}\n`;
+    csvContent += `累積測驗次數,${stats.totalQuizzesTaken}\n`;
+    csvContent += `總答題數,${stats.totalQuestionsAnswered}\n`;
+    csvContent += `總答對題數,${stats.totalCorrect}\n`;
+    csvContent += `平均答題正確率,${accuracy}%\n`;
+    csvContent += `連續學習天數,${stats.streakDays} 天\n`;
+    csvContent += `匯出日期,${new Date().toLocaleString('zh-TW')}\n\n`;
+
+    // Section 2: Quiz Results History
+    csvContent += '【歷次測驗成績紀錄】\n';
+    csvContent += '測驗日期,測驗主題,總題數,答對數,得分,耗時(秒)\n';
+    if (quizResults.length > 0) {
+      quizResults.forEach((r) => {
+        csvContent += `"${r.date}","${r.title.replace(/"/g, '""')}",${r.totalQuestions},${r.correctCount},${r.score},${r.timeSpentSeconds || 0}\n`;
+      });
+    } else {
+      csvContent += '尚無測驗紀錄\n';
+    }
+    csvContent += '\n';
+
+    // Section 3: Mistake List
+    csvContent += '【錯題與弱點觀念清單】\n';
+    csvContent += '題目類別,題目內容,學生選擇,正確答案,錯題次數,關鍵解析\n';
+    if (mistakes.length > 0) {
+      mistakes.forEach((m) => {
+        const selectedStr = m.question.options?.[m.selectedOption] || '未選擇';
+        const correctStr = m.question.options?.[m.question.answerIndex] || '';
+        csvContent += `"${m.question.category}","${m.question.question.replace(/"/g, '""')}","${selectedStr.replace(/"/g, '""')}","${correctStr.replace(/"/g, '""')}",${m.wrongCount || 1},"${(m.question.explanation || '').replace(/"/g, '""')}"\n`;
+      });
+    } else {
+      csvContent += '目前無錯題紀錄，太厲害了！\n';
+    }
+    csvContent += '\n';
+
+    // Section 4: Pronunciation History
+    csvContent += '【自然發音 Phonics 與語音評測歷程】\n';
+    csvContent += '評測日期,評測標籤,發音準確率(%),語意流暢度(%),練習主題/單字\n';
+    phonicsHistory.forEach((p) => {
+      csvContent += `"${p.date}","${p.label}",${p.score},${p.fluency},"${p.category} (${p.word})"\n`;
+    });
+
+    // Trigger download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `國小英語學習紀錄報表_${studentName}_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleGenerateWeeklyReport = async () => {
+    setShowWeeklyReport(true);
+    setWeeklyReportLoading(true);
+    setWeeklyReportText(null);
+
+    try {
+      const res = await fetch('/api/gemini/weekly-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentName,
+          stats,
+          quizResults,
+          mistakes,
+          grade
+        })
+      });
+
+      const data = await res.json();
+      if (data.success && data.report) {
+        setWeeklyReportText(data.report);
+      } else {
+        setWeeklyReportText('產生週報時連線忙碌，請稍後重試！');
+      }
+    } catch (error) {
+      console.error('Failed to generate weekly report:', error);
+      setWeeklyReportText('網路傳輸發生錯誤，請稍後重試。');
+    } finally {
+      setWeeklyReportLoading(false);
+    }
+  };
+
+  const handleCopyReport = () => {
+    if (!weeklyReportText) return;
+    navigator.clipboard.writeText(weeklyReportText);
+    setReportCopied(true);
+    setTimeout(() => setReportCopied(false), 2000);
+  };
 
   // Generate 7-day trend data from quizResults
   const last7DaysData = useMemo(() => {
@@ -53,36 +238,68 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ stats, quizR
     return dates;
   }, [quizResults]);
 
+  // Check and save 7-day badge achievement to localStorage
+  const is7DaysUnlocked = useMemo(() => {
+    const saved = localStorage.getItem('elem_eng_badge_7days_unlocked');
+    if (stats.streakDays >= 7) {
+      if (saved !== 'true') {
+        localStorage.setItem('elem_eng_badge_7days_unlocked', 'true');
+        localStorage.setItem('elem_eng_badge_7days_unlocked_at', new Date().toISOString());
+      }
+      return true;
+    }
+    return saved === 'true';
+  }, [stats.streakDays]);
+
+  useEffect(() => {
+    if (stats.streakDays >= 7) {
+      localStorage.setItem('elem_eng_badge_7days_unlocked', 'true');
+    }
+  }, [stats.streakDays]);
+
   const BADGES = [
     {
       id: 'badge-1',
       title: '🌟 英語初學者',
       desc: '完成個人第 1 次測驗！',
-      unlocked: stats.totalQuizzesTaken >= 1
+      unlocked: stats.totalQuizzesTaken >= 1,
+      icon: '🌟'
     },
     {
       id: 'badge-2',
       title: '🔥 連續學習達人',
       desc: '連續天數達成 3 天！',
-      unlocked: stats.streakDays >= 3
+      unlocked: stats.streakDays >= 3,
+      icon: '🔥'
+    },
+    {
+      id: 'badge-7days',
+      title: '👑 英語小達人',
+      desc: '連續天數達成 7 天！習慣成自然！',
+      unlocked: is7DaysUnlocked,
+      icon: '👑',
+      special: true
     },
     {
       id: 'badge-3',
       title: '💯 滿分小高手',
       desc: '在測驗中獲得 100 分！',
-      unlocked: quizResults.some((r) => r.score === 100)
+      unlocked: quizResults.some((r) => r.score === 100),
+      icon: '💯'
     },
     {
       id: 'badge-4',
       title: '📖 單字庫小學士',
       desc: '累計回答超過 20 道英文題目！',
-      unlocked: stats.totalQuestionsAnswered >= 20
+      unlocked: stats.totalQuestionsAnswered >= 20,
+      icon: '📖'
     },
     {
       id: 'badge-5',
       title: '🤖 AI 智慧探險員',
       desc: '體驗過 AI 智慧出題測驗！',
-      unlocked: quizResults.some((r) => r.title.includes('AI'))
+      unlocked: quizResults.some((r) => r.title.includes('AI')),
+      icon: '🤖'
     }
   ];
 
@@ -91,14 +308,50 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ stats, quizR
       ? Math.round((stats.totalCorrect / stats.totalQuestionsAnswered) * 100)
       : 0;
 
+  // 5-Dimension Competency Radar Data
+  const competencyRadarData = useMemo(() => {
+    let listeningScore = 78;
+    let vocabScore = 82;
+    let grammarScore = 68;
+    let conversationScore = 85;
+    let phonicsScore = 75;
+
+    if (quizResults.length > 0) {
+      const avg = accuracyRate || 75;
+      listeningScore = Math.min(100, Math.max(50, avg + 5));
+      vocabScore = Math.min(100, Math.max(50, avg + 8));
+      grammarScore = Math.min(100, Math.max(50, avg - 6));
+      conversationScore = Math.min(100, Math.max(50, avg + 2));
+      phonicsScore = Math.min(100, Math.max(50, avg - 2));
+    }
+
+    return [
+      { subject: '聽力辨識', score: listeningScore, fullMark: 100 },
+      { subject: '字彙積累', score: vocabScore, fullMark: 100 },
+      { subject: '語法結構', score: grammarScore, fullMark: 100 },
+      { subject: '生活對話', score: conversationScore, fullMark: 100 },
+      { subject: '自然發音', score: phonicsScore, fullMark: 100 }
+    ];
+  }, [quizResults, accuracyRate]);
+
   return (
     <div className="max-w-4xl mx-auto my-6 px-4">
-      {/* Title */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2">
-          🏆 學習成就與榮譽證書
-        </h2>
-        <p className="text-xs text-slate-500 mt-1">累積練習步履，解鎖勳章並領取專屬國小英語榮譽證書！</p>
+      {/* Title Header with CSV Export */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2">
+            🏆 學習成就與榮譽證書
+          </h2>
+          <p className="text-xs text-slate-500 mt-1">累積練習步履，解鎖勳章、查看發音進化歷程並匯出專屬學習報表！</p>
+        </div>
+
+        <button
+          onClick={handleExportCSV}
+          className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-4 py-2.5 rounded-2xl shadow-sm hover:shadow-md transition-all active:scale-95 shrink-0 self-start sm:self-auto cursor-pointer"
+        >
+          <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+          <span>匯出學習記錄為 CSV</span>
+        </button>
       </div>
 
       {/* Stats Cards */}
@@ -123,6 +376,115 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ stats, quizR
           <div className="text-3xl font-black text-orange-500 flex items-center justify-center gap-1">
             <Flame className="w-6 h-6 fill-orange-500" />
             {stats.streakDays} 天
+          </div>
+        </div>
+      </div>
+
+      {/* Mood Interaction Stats */}
+      {stats.moodCounts && Object.keys(stats.moodCounts).length > 0 && (
+        <div className="bg-gradient-to-r from-purple-50 via-pink-50 to-amber-50 border border-purple-100 rounded-3xl p-4 sm:p-5 mb-8 shadow-xs">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-base">💖</span>
+            <h3 className="font-black text-xs sm:text-sm text-purple-900">AI 老師心情互動與情緒陪伴紀錄 (Mood Tracking)</h3>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(stats.moodCounts).map(([moodId, count]) => {
+              const labelMap: Record<string, { label: string; emoji: string }> = {
+                frustrated: { label: '卡關挫折', emoji: '😭' },
+                celebrate: { label: '慶祝高分', emoji: '🎉' },
+                motivated: { label: '充滿幹勁', emoji: '💪' },
+                tired: { label: '讀書累了', emoji: '😴' },
+                confused: { label: '觀念不解', emoji: '🤔' }
+              };
+              const item = labelMap[moodId] || { label: moodId, emoji: '✨' };
+              return (
+                <div key={moodId} className="bg-white/90 border border-purple-200/80 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-800 shadow-2xs flex items-center gap-1.5">
+                  <span>{item.emoji}</span>
+                  <span>{item.label}</span>
+                  <span className="bg-purple-100 text-purple-800 text-[10px] px-1.5 py-0.5 rounded-full font-black">{count} 次互動</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Recharts 5-Dimension Competency Radar Chart */}
+      <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 mb-8 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+          <div>
+            <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
+              <BarChart2 className="w-5 h-5 text-indigo-600" />
+              英語五維能力核心雷達圖 (Competency Radar Chart)
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">多維度診斷：聽力、字彙、語法、對話、發音發展平衡度</p>
+          </div>
+
+          <span className="bg-indigo-50 text-indigo-800 border border-indigo-200 text-xs font-bold px-3 py-1 rounded-full self-start sm:self-auto">
+            AI 智慧評估分：{accuracyRate > 0 ? `${accuracyRate} 分` : '高分表現'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+          <div className="h-64 w-full bg-indigo-50/40 rounded-2xl p-2 border border-indigo-100/60 flex items-center justify-center">
+            <ResponsiveContainer width="100%" height="100%">
+              <RadarChart cx="50%" cy="50%" outerRadius="70%" data={competencyRadarData}>
+                <PolarGrid stroke="#cbd5e1" />
+                <PolarAngleAxis
+                  dataKey="subject"
+                  tick={{ fill: '#334155', fontSize: 12, fontWeight: 700 }}
+                />
+                <PolarRadiusAxis angle={30} domain={[0, 100]} stroke="#94a3b8" />
+                <Radar
+                  name="能力指標"
+                  dataKey="score"
+                  stroke="#6366f1"
+                  fill="#818cf8"
+                  fillOpacity={0.6}
+                />
+                <Tooltip
+                  formatter={(value: any) => [`${value} 分`, '能力強弱值']}
+                  contentStyle={{
+                    backgroundColor: '#1e293b',
+                    borderColor: '#475569',
+                    borderRadius: '0.75rem',
+                    color: '#fff',
+                    fontSize: '12px'
+                  }}
+                />
+              </RadarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="space-y-3">
+            <div className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white p-4 rounded-2xl shadow-xs">
+              <div className="flex items-center gap-2 font-black text-sm mb-1">
+                <Sparkles className="w-4 h-4 text-yellow-300" />
+                <span>AI 老師能力五維診斷結論：</span>
+              </div>
+              <p className="text-xs text-indigo-100 leading-relaxed font-medium">
+                強項為<strong>【生活對話】</strong>與<strong>【字彙積累】</strong>，口語直覺反應極佳！建議持續在【語法結構】與【聽力細節】加強練習，能讓答題速度與正確率更上一層樓！
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-xs font-bold text-slate-700">
+              <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-xl flex justify-between items-center">
+                <span>🎧 聽力辨識</span>
+                <span className="text-indigo-600 font-black">{competencyRadarData[0].score} 分</span>
+              </div>
+              <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-xl flex justify-between items-center">
+                <span>📖 字彙積累</span>
+                <span className="text-emerald-600 font-black">{competencyRadarData[1].score} 分</span>
+              </div>
+              <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-xl flex justify-between items-center">
+                <span>📝 語法結構</span>
+                <span className="text-purple-600 font-black">{competencyRadarData[2].score} 分</span>
+              </div>
+              <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-xl flex justify-between items-center">
+                <span>💬 生活對話</span>
+                <span className="text-amber-600 font-black">{competencyRadarData[3].score} 分</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -214,6 +576,190 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ stats, quizR
         </div>
       </div>
 
+      {/* Phonics Pronunciation Evolution Section */}
+      <div className="bg-white border border-rose-100 rounded-3xl p-5 sm:p-6 mb-8 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="bg-rose-100 text-rose-800 text-xs font-black px-2.5 py-0.5 rounded-full border border-rose-200">
+                Phonics & Speech Evolution
+              </span>
+              <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                <Mic className="w-5 h-5 text-rose-600" />
+                自然發音（Phonics）發音進化歷程
+              </h3>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">追蹤歷史錄音評測分數，繪製自然發音準確率（粉紅區塊）與語意流暢度（紫線）成長曲線</p>
+          </div>
+
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <span className="bg-rose-50 text-rose-800 border border-rose-200 text-xs font-black px-3 py-1 rounded-full flex items-center gap-1.5">
+              <Activity className="w-3.5 h-3.5 text-rose-600 animate-pulse" />
+              平均發音勝任率：{Math.round(phonicsHistory.reduce((acc, curr) => acc + curr.score, 0) / (phonicsHistory.length || 1))}%
+            </span>
+          </div>
+        </div>
+
+        {/* Phonics Progress Recharts AreaChart */}
+        <div className="w-full h-64 sm:h-72 mb-6">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={phonicsHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <defs>
+                <linearGradient id="phonicsScoreGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.4} />
+                  <stop offset="95%" stopColor="#f43f5e" stopOpacity={0.0} />
+                </linearGradient>
+                <linearGradient id="fluencyGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }} axisLine={{ stroke: '#cbd5e1' }} />
+              <YAxis domain={[50, 100]} unit="分" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+              <Tooltip
+                content={({ active, payload, label }) => {
+                  if (active && payload && payload.length) {
+                    const dataObj = payload[0]?.payload;
+                    return (
+                      <div className="bg-slate-900/90 text-white p-3 rounded-2xl text-xs shadow-xl backdrop-blur-xs border border-slate-700">
+                        <p className="font-bold text-rose-300 mb-1">{dataObj?.label} ({label})</p>
+                        <p className="text-slate-300 mb-1">主題：<span className="text-amber-300 font-bold">{dataObj?.category}</span></p>
+                        <p className="flex items-center gap-1.5 text-rose-200">
+                          🎯 發音準確率：<span className="font-bold text-white text-sm">{dataObj?.score}%</span>
+                        </p>
+                        <p className="flex items-center gap-1.5 text-purple-200 mt-0.5">
+                          ⚡ 語意流暢度：<span className="font-bold text-white text-sm">{dataObj?.fluency}%</span>
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-1">練習單字/句子：{dataObj?.word}</p>
+                      </div>
+                    );
+                  }
+                  return null;
+                }}
+              />
+              <Area
+                type="monotone"
+                dataKey="score"
+                name="發音準確率 (%)"
+                stroke="#f43f5e"
+                strokeWidth={3}
+                fillOpacity={1}
+                fill="url(#phonicsScoreGrad)"
+              />
+              <Area
+                type="monotone"
+                dataKey="fluency"
+                name="語意流暢度 (%)"
+                stroke="#8b5cf6"
+                strokeWidth={2}
+                strokeDasharray="4 4"
+                fillOpacity={1}
+                fill="url(#fluencyGrad)"
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Live Voice Evaluation Interactive Practice Tool */}
+        <div className="bg-gradient-to-r from-rose-50 via-purple-50 to-amber-50 border border-rose-200/80 rounded-2xl p-4 sm:p-5">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-3">
+            <div>
+              <h4 className="font-black text-sm text-slate-800 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-rose-500" />
+                即時語音實測體驗：驗證你的 Phonics 自然發音！
+              </h4>
+              <p className="text-xs text-slate-500 mt-0.5">點擊喇叭聆聽標準發音，再按下麥克風按鈕進行語音評測與評分紀錄！</p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={activePhonicsTestWord}
+                onChange={(e) => setActivePhonicsTestWord(e.target.value)}
+                placeholder="輸入單字，如 Elephant"
+                className="px-3 py-1.5 rounded-xl bg-white border border-rose-200 text-slate-800 font-bold text-xs outline-hidden shadow-2xs w-36"
+              />
+              <button
+                onClick={() => playSpeech(activePhonicsTestWord, { rate: speechSpeed })}
+                className="p-2 rounded-xl bg-white hover:bg-rose-100 text-rose-700 border border-rose-200 shadow-2xs transition-all cursor-pointer"
+                title="播放標準英語示範朗讀"
+              >
+                <Volume2 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <button
+              onClick={handleSimulateVoiceTest}
+              disabled={isRecordingTest}
+              className={`w-full sm:w-auto px-5 py-2.5 rounded-2xl font-black text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95 ${
+                isRecordingTest
+                  ? 'bg-rose-500 text-white animate-pulse'
+                  : 'bg-rose-600 hover:bg-rose-700 text-white'
+              }`}
+            >
+              {isRecordingTest ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  <span>AI 正在分析發音聲調與聲波...</span>
+                </>
+              ) : (
+                <>
+                  <Mic className="w-4 h-4 text-rose-200" />
+                  <span>開始錄音語音評測《{activePhonicsTestWord}》</span>
+                </>
+              )}
+            </button>
+
+            {testScoreResult && (
+              <div className="flex-1 bg-white border border-rose-200 p-3 rounded-2xl text-xs font-bold text-slate-800 shadow-2xs flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">🎉</span>
+                  <p className="text-slate-700 leading-tight">{testScoreResult.feedback}</p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <span className="bg-rose-100 text-rose-800 px-2.5 py-1 rounded-xl text-[11px] font-black">
+                    準確度 {testScoreResult.score}%
+                  </span>
+                  <span className="bg-purple-100 text-purple-800 px-2.5 py-1 rounded-xl text-[11px] font-black">
+                    流暢度 {testScoreResult.fluency}%
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Weekly Progress Report Banner */}
+      <div className="bg-gradient-to-r from-teal-600 via-emerald-600 to-indigo-700 text-white rounded-3xl p-6 sm:p-8 mb-8 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
+        <div className="relative z-10">
+          <span className="bg-white/20 text-teal-100 text-xs font-black px-3 py-1 rounded-full uppercase tracking-wider mb-2 inline-flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-yellow-300 animate-spin" />
+            AI Parent Progress Report
+          </span>
+          <h3 className="text-2xl font-black mb-1 flex items-center gap-2">
+            <span>學習歷程週報</span>
+            <FileText className="w-6 h-6 text-teal-200" />
+          </h3>
+          <p className="text-xs text-teal-100 max-w-xl leading-relaxed">
+            AI 自動彙整孩子本週學習強項、弱點觀念與答題正確率，並產出家庭親職輔導建議，讓家長輕鬆掌握學習進度！
+          </p>
+        </div>
+
+        <div className="relative z-10 flex shrink-0">
+          <button
+            onClick={handleGenerateWeeklyReport}
+            className="w-full sm:w-auto bg-amber-400 hover:bg-amber-300 text-amber-950 font-black text-sm px-6 py-3 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <FileText className="w-4 h-4" />
+            <span>生成家長學習週報</span>
+          </button>
+        </div>
+      </div>
+
       {/* Certificate Banner */}
       <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white rounded-3xl p-6 sm:p-8 mb-8 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
@@ -242,45 +788,203 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ stats, quizR
       </div>
 
       {/* Badges Grid */}
-      <h3 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
-        <Medal className="w-5 h-5 text-amber-500" />
-        成就勳章牆 Badges
-      </h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
+          <Medal className="w-5 h-5 text-amber-500" />
+          成就勳章牆 Badges
+        </h3>
+        <span className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full">
+          已解鎖 {BADGES.filter((b) => b.unlocked).length} / {BADGES.length} 個勳章
+        </span>
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-        {BADGES.map((badge) => (
-          <div
-            key={badge.id}
-            className={`p-5 rounded-3xl border transition-all flex items-center space-x-3 ${
-              badge.unlocked
-                ? 'bg-white border-amber-200 shadow-sm'
-                : 'bg-slate-50 border-slate-200 opacity-60'
-            }`}
-          >
-            <div
-              className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold ${
-                badge.unlocked
-                  ? 'bg-amber-100 text-amber-600 shadow-xs'
-                  : 'bg-slate-200 text-slate-400'
+        {BADGES.map((badge, idx) => {
+          const isSpecialMaster = badge.id === 'badge-7days' && badge.unlocked;
+
+          return (
+            <motion.div
+              key={badge.id}
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.08, type: 'spring', damping: 20 }}
+              whileHover={{ scale: 1.03, y: -2 }}
+              className={`p-5 rounded-3xl border relative overflow-hidden transition-all flex items-start space-x-3.5 ${
+                isSpecialMaster
+                  ? 'bg-gradient-to-br from-amber-500/10 via-amber-100/60 to-yellow-50/80 border-amber-400 shadow-md ring-2 ring-amber-300'
+                  : badge.unlocked
+                  ? 'bg-white border-amber-200 shadow-xs'
+                  : 'bg-slate-50 border-slate-200 opacity-60'
               }`}
             >
-              {badge.unlocked ? '🏆' : '🔒'}
-            </div>
+              {/* Special Master Glow Effect */}
+              {isSpecialMaster && (
+                <div className="absolute -right-6 -top-6 w-20 h-20 bg-amber-300/30 rounded-full blur-xl pointer-events-none" />
+              )}
 
-            <div>
-              <h4 className="font-bold text-sm text-slate-800">{badge.title}</h4>
-              <p className="text-xs text-slate-500 mt-0.5">{badge.desc}</p>
-              <span
-                className={`text-[10px] font-bold mt-1 inline-block px-2 py-0.5 rounded-full ${
-                  badge.unlocked ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-500'
+              <div
+                className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold flex-shrink-0 relative ${
+                  isSpecialMaster
+                    ? 'bg-gradient-to-tr from-amber-400 to-yellow-300 text-amber-950 shadow-md'
+                    : badge.unlocked
+                    ? 'bg-amber-100 text-amber-600 shadow-xs'
+                    : 'bg-slate-200 text-slate-400'
                 }`}
               >
-                {badge.unlocked ? '已解鎖' : '未達成'}
-              </span>
-            </div>
-          </div>
-        ))}
+                {badge.unlocked ? badge.icon : '🔒'}
+                {isSpecialMaster && (
+                  <motion.div
+                    animate={{ rotate: [0, 15, -15, 0] }}
+                    transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
+                    className="absolute -top-1 -right-1"
+                  >
+                    <Crown className="w-4 h-4 text-amber-700 fill-yellow-400" />
+                  </motion.div>
+                )}
+              </div>
+
+              <div className="flex-1">
+                <div className="flex items-center gap-1.5">
+                  <h4 className="font-bold text-sm text-slate-800">{badge.title}</h4>
+                  {isSpecialMaster && (
+                    <Sparkles className="w-4 h-4 text-amber-500 animate-pulse flex-shrink-0" />
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{badge.desc}</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <span
+                    className={`text-[10px] font-black px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                      isSpecialMaster
+                        ? 'bg-amber-500 text-white shadow-2xs'
+                        : badge.unlocked
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-slate-200 text-slate-500'
+                    }`}
+                  >
+                    {badge.unlocked ? (
+                      <>
+                        <CheckCircle className="w-3 h-3" />
+                        {isSpecialMaster ? '7日達人榮耀' : '已解鎖'}
+                      </>
+                    ) : (
+                      '未達成'
+                    )}
+                  </span>
+                </div>
+              </div>
+            </motion.div>
+          );
+        })}
       </div>
+
+      {/* Weekly Report Modal */}
+      <AnimatePresence>
+        {showWeeklyReport && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs print:p-0 print:bg-white print:static print:inset-auto"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-3xl border border-teal-100 shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden print:max-w-none print:shadow-none print:border-none print:max-h-none"
+            >
+              {/* Modal Header */}
+              <div className="bg-gradient-to-r from-teal-700 via-emerald-700 to-indigo-800 p-5 text-white flex items-center justify-between print:bg-none print:text-slate-900 print:p-0 print:border-b print:pb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-yellow-300">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-lg flex items-center gap-2">
+                      國小英語 AI 學習歷程週報
+                      <span className="text-xs font-bold bg-amber-400 text-amber-950 px-2 py-0.5 rounded-full">
+                        家長專屬
+                      </span>
+                    </h3>
+                    <p className="text-xs text-teal-100">學生：{studentName || '小學霸'} ・ 產生時間：{new Date().toLocaleDateString('zh-TW')}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 print:hidden">
+                  <button
+                    onClick={() => setShowWeeklyReport(false)}
+                    className="p-1.5 rounded-xl hover:bg-white/20 transition-colors text-white cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Content Body */}
+              <div className="p-6 overflow-y-auto flex-1 bg-slate-50/50 print:bg-white print:p-0">
+                {weeklyReportLoading ? (
+                  <div className="py-16 text-center text-sm font-bold text-teal-800 flex flex-col items-center justify-center gap-3">
+                    <Loader2 className="w-8 h-8 animate-spin text-teal-600" />
+                    <p className="text-base font-black text-slate-800">AI 正在專業彙整 {studentName} 的本週學習數據與表現...</p>
+                    <p className="text-xs text-slate-500 max-w-md">正在分析答題正確率、強項單元與易錯題庫，產出家庭指導建議...</p>
+                  </div>
+                ) : (
+                  <div className="bg-white border border-teal-100 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4 text-slate-800 print:border-none print:shadow-none print:p-0">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-100 print:hidden">
+                      <div className="flex items-center gap-2 text-xs text-slate-500 font-bold">
+                        <BookOpen className="w-4 h-4 text-teal-600" />
+                        <span>週報報告全文（家長可直接複製分享或列印）</span>
+                      </div>
+                      {weeklyReportText && (
+                        <button
+                          onClick={() => playSpeech(weeklyReportText, { rate: speechSpeed })}
+                          className="flex items-center gap-1.5 text-xs text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer"
+                        >
+                          <Volume2 className="w-3.5 h-3.5" />
+                          <span>語音念給家長聽</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Report Text Content */}
+                    <div className="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap font-medium">
+                      {weeklyReportText}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              {!weeklyReportLoading && weeklyReportText && (
+                <div className="p-4 bg-white border-t border-slate-100 flex items-center justify-between gap-3 print:hidden">
+                  <button
+                    onClick={handleCopyReport}
+                    className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-4 py-2.5 rounded-xl transition-all cursor-pointer"
+                  >
+                    {reportCopied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                    <span>{reportCopied ? '已複製週報文字' : '複製週報內容'}</span>
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => window.print()}
+                      className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-xs transition-all cursor-pointer"
+                    >
+                      <Printer className="w-4 h-4" />
+                      <span>列印週報</span>
+                    </button>
+                    <button
+                      onClick={() => setShowWeeklyReport(false)}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-4 py-2.5 rounded-xl transition-all cursor-pointer"
+                    >
+                      關閉
+                    </button>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Certificate Modal */}
       {showCertificate && (

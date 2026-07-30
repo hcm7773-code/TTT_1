@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { GradeLevel, Question, QuizResult, MistakeItem, UserStats } from './types';
+import { GradeLevel, Question, QuizResult, MistakeItem, UserStats, LearningStyle } from './types';
 import { DEFAULT_QUESTIONS } from './data/defaultQuestions';
 import { Header } from './components/Header';
 import { QuizRunner } from './components/QuizRunner';
@@ -14,8 +14,14 @@ import { FlashcardsView } from './components/FlashcardsView';
 import { GrammarView } from './components/GrammarView';
 import { MistakesView } from './components/MistakesView';
 import { AchievementsView } from './components/AchievementsView';
-import { Sparkles, Loader2, X, Volume2, BookOpen } from 'lucide-react';
+import { DailyChallengeCard } from './components/DailyChallengeCard';
+import { TodayFocusCard } from './components/TodayFocusCard';
+import { BlindSpotCard } from './components/BlindSpotCard';
+import { QuickAskBar } from './components/QuickAskBar';
+import { Sparkles, Loader2, X, Volume2, BookOpen, Clock, Brain, RotateCcw } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { playSpeech } from './utils/speech';
+import { generateBlankQuestion } from './utils/blankQuestionGenerator';
 
 export default function App() {
   const [grade, setGrade] = useState<GradeLevel>(() => {
@@ -28,6 +34,16 @@ export default function App() {
     const saved = localStorage.getItem('elem_eng_speed');
     return saved ? parseFloat(saved) : 0.85;
   });
+
+  const [learningStyle, setLearningStyle] = useState<LearningStyle>(() => {
+    const saved = localStorage.getItem('elem_eng_learning_style');
+    return (saved as LearningStyle) || 'fun';
+  });
+
+  const handleSetLearningStyle = (style: LearningStyle) => {
+    setLearningStyle(style);
+    localStorage.setItem('elem_eng_learning_style', style);
+  };
 
   const [quizQuestions, setQuizQuestions] = useState<Question[]>([]);
   const [quizTitle, setQuizTitle] = useState('國小英語綜合練習題');
@@ -80,6 +96,25 @@ export default function App() {
     loading: false
   });
 
+  const [spacedReviewModalOpen, setSpacedReviewModalOpen] = useState(false);
+
+  // Spaced Repetition Review check (> 5 mistakes & > 24h since last review)
+  useEffect(() => {
+    if (mistakes.length >= 5) {
+      const lastReview = localStorage.getItem('elem_eng_last_review_time');
+      const lastReviewTime = lastReview ? parseInt(lastReview, 10) : 0;
+      const now = Date.now();
+      const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+
+      if (!lastReviewTime || now - lastReviewTime > TWENTY_FOUR_HOURS) {
+        const timer = setTimeout(() => {
+          setSpacedReviewModalOpen(true);
+        }, 800);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [mistakes.length]);
+
   // Save changes
   useEffect(() => {
     localStorage.setItem('elem_eng_grade', grade);
@@ -114,6 +149,19 @@ export default function App() {
   const handleFinishQuiz = (result: QuizResult) => {
     setQuizResults((prev) => [result, ...prev]);
 
+    // Check if this was a daily challenge
+    if (result.title.includes('今日')) {
+      const todayIso = new Date().toISOString().split('T')[0];
+      localStorage.setItem(
+        `elem_eng_daily_${todayIso}`,
+        JSON.stringify({
+          completed: true,
+          score: result.score,
+          completedAt: new Date().toISOString()
+        })
+      );
+    }
+
     setStats((prev) => {
       const todayStr = new Date().toDateString();
       let streak = prev.streakDays;
@@ -132,18 +180,49 @@ export default function App() {
     });
   };
 
-  // Add Mistake
+  // Add Mistake with auto-reinforcement tracking
   const handleAddMistake = (question: Question, selectedOption: number) => {
     setMistakes((prev) => {
-      if (prev.some((m) => m.question.id === question.id)) return prev;
+      const existingIndex = prev.findIndex((m) => m.question.id === question.id);
+      if (existingIndex >= 0) {
+        const existing = prev[existingIndex];
+        const newWrongCount = (existing.wrongCount || 1) + 1;
+        const autoReinforced = newWrongCount >= 2 || existing.autoReinforced || false;
+        const blankQ = existing.blankQuestion || generateBlankQuestion(question);
+
+        const updated = [...prev];
+        updated[existingIndex] = {
+          ...existing,
+          selectedOption,
+          timestamp: new Date().toISOString(),
+          wrongCount: newWrongCount,
+          autoReinforced,
+          blankQuestion: blankQ
+        };
+        return updated;
+      }
+
+      // New mistake
+      const blankQ = generateBlankQuestion(question);
       const newItem: MistakeItem = {
         id: `m-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
         question,
         selectedOption,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        wrongCount: 1,
+        fillInBlankPracticeCount: 0,
+        autoReinforced: false,
+        blankQuestion: blankQ
       };
       return [newItem, ...prev];
     });
+  };
+
+  // Update Mistake Item state
+  const handleUpdateMistake = (updatedMistake: MistakeItem) => {
+    setMistakes((prev) =>
+      prev.map((m) => (m.id === updatedMistake.id ? updatedMistake : m))
+    );
   };
 
   // Remove Mistake
@@ -157,8 +236,23 @@ export default function App() {
     }
   };
 
+  // Record Mood Interaction
+  const handleRecordMood = (moodId: string) => {
+    setStats((prev) => {
+      const currentMoodCounts = prev.moodCounts || {};
+      const updatedCounts = {
+        ...currentMoodCounts,
+        [moodId]: (currentMoodCounts[moodId] || 0) + 1
+      };
+      const updatedStats = { ...prev, moodCounts: updatedCounts };
+      localStorage.setItem('elem_eng_user_stats', JSON.stringify(updatedStats));
+      return updatedStats;
+    });
+  };
+
   // Start Retest
   const handleStartRetest = (questions: Question[]) => {
+    localStorage.setItem('elem_eng_last_review_time', Date.now().toString());
     setQuizQuestions(questions);
     setQuizTitle('錯題重點重測');
     setActiveTab('quiz');
@@ -190,7 +284,8 @@ export default function App() {
           options: question.options,
           correctAnswer: question.options[question.answerIndex],
           userAnswer: selectedOption >= 0 ? question.options[selectedOption] : '未選擇',
-          grade
+          grade,
+          learningStyle
         })
       });
 
@@ -230,29 +325,56 @@ export default function App() {
         speechSpeed={speechSpeed}
         setSpeechSpeed={setSpeechSpeed}
         openAiTutor={() => setAiTutorOpen(true)}
+        stats={stats}
+        quizResults={quizResults}
+        learningStyle={learningStyle}
+        setLearningStyle={handleSetLearningStyle}
+        mistakes={mistakes}
       />
 
       {/* Main Content Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-4 sm:py-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-4 sm:py-6 pb-24">
         {activeTab === 'quiz' && (
-          <QuizRunner
-            questions={quizQuestions}
-            grade={grade}
-            quizTitle={quizTitle}
-            speechSpeed={speechSpeed}
-            onFinishQuiz={handleFinishQuiz}
-            onAddMistake={handleAddMistake}
-            onRequestAiExplanation={handleRequestAiExplanation}
-            onRestartQuiz={() => {
-              const filtered = DEFAULT_QUESTIONS.filter((q) => q.grade === grade);
-              setQuizQuestions(filtered.length > 0 ? filtered : DEFAULT_QUESTIONS);
-              setQuizTitle(`國小${grade === 'low' ? '低年級' : grade === 'mid' ? '中年級' : '高年級'}英語綜合測驗`);
-            }}
-          />
+          <div>
+            <TodayFocusCard
+              grade={grade}
+              mistakes={mistakes}
+              speechSpeed={speechSpeed}
+            />
+
+            <DailyChallengeCard
+              grade={grade}
+              mistakes={mistakes}
+              streakDays={stats.streakDays}
+              onStartDailyChallenge={(questions, title) => {
+                setQuizQuestions(questions);
+                setQuizTitle(title);
+              }}
+            />
+
+            <QuizRunner
+              questions={quizQuestions}
+              grade={grade}
+              quizTitle={quizTitle}
+              speechSpeed={speechSpeed}
+              onFinishQuiz={handleFinishQuiz}
+              onAddMistake={handleAddMistake}
+              onRequestAiExplanation={handleRequestAiExplanation}
+              onRestartQuiz={() => {
+                const filtered = DEFAULT_QUESTIONS.filter((q) => q.grade === grade);
+                setQuizQuestions(filtered.length > 0 ? filtered : DEFAULT_QUESTIONS);
+                setQuizTitle(`國小${grade === 'low' ? '低年級' : grade === 'mid' ? '中年級' : '高年級'}英語綜合測驗`);
+              }}
+            />
+          </div>
         )}
 
         {activeTab === 'ai-generator' && (
-          <AiQuizGenerator grade={grade} onQuestionsGenerated={handleAiQuestionsGenerated} />
+          <AiQuizGenerator
+            grade={grade}
+            quizResults={quizResults}
+            onQuestionsGenerated={handleAiQuestionsGenerated}
+          />
         )}
 
         {activeTab === 'flashcards' && <FlashcardsView grade={grade} speechSpeed={speechSpeed} />}
@@ -266,18 +388,34 @@ export default function App() {
         )}
 
         {activeTab === 'mistakes' && (
-          <MistakesView
-            mistakes={mistakes}
-            speechSpeed={speechSpeed}
-            onRemoveMistake={handleRemoveMistake}
-            onClearAllMistakes={handleClearAllMistakes}
-            onStartRetest={handleStartRetest}
-            onRequestAiExplanation={handleRequestAiExplanation}
-          />
+          <div>
+            <BlindSpotCard
+              grade={grade}
+              mistakes={mistakes}
+              onStartTargetedPractice={handleStartRetest}
+              onOpenFlashcardFocus={() => setActiveTab('flashcards')}
+            />
+
+            <MistakesView
+              mistakes={mistakes}
+              speechSpeed={speechSpeed}
+              onRemoveMistake={handleRemoveMistake}
+              onUpdateMistake={handleUpdateMistake}
+              onClearAllMistakes={handleClearAllMistakes}
+              onStartRetest={handleStartRetest}
+              onRequestAiExplanation={handleRequestAiExplanation}
+            />
+          </div>
         )}
 
         {activeTab === 'achievements' && (
-          <AchievementsView stats={stats} quizResults={quizResults} />
+          <AchievementsView
+            stats={stats}
+            quizResults={quizResults}
+            grade={grade}
+            mistakes={mistakes}
+            speechSpeed={speechSpeed}
+          />
         )}
       </main>
 
@@ -287,6 +425,11 @@ export default function App() {
         onClose={() => setAiTutorOpen(false)}
         grade={grade}
         speechSpeed={speechSpeed}
+        mistakes={mistakes}
+        quizResults={quizResults}
+        onRecordMood={handleRecordMood}
+        learningStyle={learningStyle}
+        setLearningStyle={handleSetLearningStyle}
       />
 
       {/* AI Explanation Dialog */}
@@ -304,9 +447,18 @@ export default function App() {
               <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-bold">
                 <Sparkles className="w-5 h-5 text-yellow-300" />
               </div>
-              <div>
-                <h3 className="font-black text-lg text-slate-800">AI 老師題旨診斷解析</h3>
-                <p className="text-xs text-slate-500">深入淺出的思考邏輯與記憶竅門</p>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-black text-lg text-slate-800">AI 老師題旨診斷解析</h3>
+                  <span className="bg-indigo-100 text-indigo-900 border border-indigo-200 text-xs font-bold px-2 py-0.5 rounded-full">
+                    {learningStyle === 'fun'
+                      ? '🎭 強調趣味風格'
+                      : learningStyle === 'precise'
+                      ? '🎯 強調精準風格'
+                      : '⚡ 快速複習風格'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500">根據你選擇的 AI 學習風格產生的獨家解題說明</p>
               </div>
             </div>
 
@@ -348,8 +500,81 @@ export default function App() {
         </div>
       )}
 
+      {/* Spaced Repetition Reminder Modal */}
+      <AnimatePresence>
+        {spacedReviewModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+              className="bg-white rounded-3xl border border-rose-100 shadow-2xl max-w-lg w-full p-6 sm:p-8 relative overflow-hidden"
+            >
+              <button
+                onClick={() => setSpacedReviewModalOpen(false)}
+                className="absolute right-4 top-4 p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-rose-500 to-amber-500 text-white flex items-center justify-center shadow-md">
+                  <Clock className="w-6 h-6 text-white animate-pulse" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-rose-600 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-100">
+                    艾賓浩斯記憶法 ⏰
+                  </span>
+                  <h3 className="font-black text-xl text-slate-800 mt-1">間隔複習黃金時間到囉！</h3>
+                </div>
+              </div>
+
+              <p className="text-sm text-slate-600 leading-relaxed mb-6 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                你的錯題本目前累積了 <strong className="text-rose-600 font-black">{mistakes.length} 道題</strong>，距離上次溫習已超過 <strong>24 小時</strong>。此時進行快速重測，能發揮最高效率將短期記憶轉化為長期記憶！加油！💪
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <motion.button
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => {
+                    setSpacedReviewModalOpen(false);
+                    handleStartRetest(mistakes.map((m) => m.question));
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-rose-500 to-amber-500 hover:from-rose-600 hover:to-amber-600 text-white font-black py-3 px-5 rounded-2xl shadow-md transition-colors text-sm"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>立刻開始錯題重測 ({mistakes.length} 題)</span>
+                </motion.button>
+
+                <button
+                  onClick={() => setSpacedReviewModalOpen(false)}
+                  className="px-4 py-3 rounded-2xl text-xs font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  稍微再等等
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating AI Quick Ask Bar */}
+      <QuickAskBar
+        grade={grade}
+        learningStyle={learningStyle}
+        speechSpeed={speechSpeed}
+        openAiTutor={() => setAiTutorOpen(true)}
+      />
+
       {/* Footer */}
-      <footer className="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-400 mt-auto">
+      <footer className="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-400 mt-auto pb-20 sm:pb-4">
         國小線上英語練習測驗平台 ・ 專為國小英語學習設計 ・ 結合 Gemini AI 智慧輔導發音與文法
       </footer>
     </div>

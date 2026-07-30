@@ -1,5 +1,7 @@
 export type GradeLevel = 'low' | 'mid' | 'high'; // low: 1-2年級, mid: 3-4年級, high: 5-6年級
 
+export type LearningStyle = 'fun' | 'precise' | 'quick'; // fun: 強調趣味, precise: 強調精準, quick: 快速複習
+
 export type QuizCategory =
   | '字母與發音'
   | '主題單字'
@@ -44,6 +46,14 @@ export interface MistakeItem {
   selectedOption: number;
   timestamp: string;
   notes?: string;
+  wrongCount?: number;
+  fillInBlankPracticeCount?: number;
+  autoReinforced?: boolean;
+  blankQuestion?: {
+    sentenceWithBlank: string;
+    targetAnswer: string;
+    hint: string;
+  };
 }
 
 export interface Flashcard {
@@ -74,4 +84,5 @@ export interface UserStats {
   totalQuestionsAnswered: number;
   totalCorrect: number;
   unlockedBadges: string[];
+  moodCounts?: Record<string, number>;
 }
