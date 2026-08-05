@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { GradeLevel, MistakeItem, QuizResult, LearningStyle } from '../types';
 import { playSpeech } from '../utils/speech';
-import { Sparkles, X, Send, Volume2, Bot, User, Loader2, Heart, ShieldAlert, Sliders, Zap, Compass } from 'lucide-react';
+import { Sparkles, X, Send, Volume2, Bot, User, Loader2, Heart, ShieldAlert, Sliders, Zap, Compass, Ear, Headphones } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface AiTutorModalProps {
@@ -14,6 +14,7 @@ interface AiTutorModalProps {
   onRecordMood?: (moodId: string) => void;
   learningStyle?: LearningStyle;
   setLearningStyle?: (style: LearningStyle) => void;
+  onOpenPronunciationModal?: () => void;
 }
 
 interface ChatMessage {
@@ -95,7 +96,8 @@ export const AiTutorModal: React.FC<AiTutorModalProps> = ({
   quizResults = [],
   onRecordMood,
   learningStyle = 'fun',
-  setLearningStyle
+  setLearningStyle,
+  onOpenPronunciationModal
 }) => {
   // Analyze top weak categories
   const weakSummary = useMemo(() => {
@@ -233,7 +235,7 @@ export const AiTutorModal: React.FC<AiTutorModalProps> = ({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
             transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-            className="bg-white rounded-3xl border border-indigo-100 shadow-2xl w-full max-w-xl h-[85vh] max-h-[650px] flex flex-col overflow-hidden"
+            className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-3xl border border-indigo-100 dark:border-slate-800 shadow-2xl w-full max-w-xl h-[85vh] max-h-[650px] flex flex-col overflow-hidden"
           >
             {/* Header */}
             <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white flex flex-col">
@@ -260,52 +262,69 @@ export const AiTutorModal: React.FC<AiTutorModalProps> = ({
                 </motion.button>
               </div>
 
-              {/* Learning Style Switcher Sub-bar */}
+              {/* Learning Style Switcher & Features Sub-bar */}
               <div className="bg-indigo-950/40 border-t border-indigo-400/30 px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-xs text-indigo-100">
                 <div className="flex items-center gap-1.5 font-bold">
                   <Sliders className="w-3.5 h-3.5 text-yellow-300 animate-pulse" />
-                  <span>AI 學習風格：</span>
+                  <span>AI 風格：</span>
+                  <div className="flex gap-1 bg-black/20 p-0.5 rounded-xl">
+                    <button
+                      onClick={() => setLearningStyle?.('fun')}
+                      className={`px-2 py-0.5 rounded-lg font-bold transition-all text-xs cursor-pointer ${
+                        learningStyle === 'fun'
+                          ? 'bg-amber-400 text-amber-950 shadow-xs'
+                          : 'text-indigo-200 hover:text-white'
+                      }`}
+                      title="強調趣味：幽默故事、圖像化生動口訣"
+                    >
+                      🎭 趣味
+                    </button>
+                    <button
+                      onClick={() => setLearningStyle?.('precise')}
+                      className={`px-2 py-0.5 rounded-lg font-bold transition-all text-xs cursor-pointer ${
+                        learningStyle === 'precise'
+                          ? 'bg-sky-400 text-sky-950 shadow-xs'
+                          : 'text-indigo-200 hover:text-white'
+                      }`}
+                      title="強調精準：結構文法解析、條理清晰"
+                    >
+                      🎯 精準
+                    </button>
+                    <button
+                      onClick={() => setLearningStyle?.('quick')}
+                      className={`px-2 py-0.5 rounded-lg font-bold transition-all text-xs cursor-pointer ${
+                        learningStyle === 'quick'
+                          ? 'bg-emerald-400 text-emerald-950 shadow-xs'
+                          : 'text-indigo-200 hover:text-white'
+                      }`}
+                      title="快速複習：極簡 3 大重點列舉、10秒速記"
+                    >
+                      ⚡ 速記
+                    </button>
+                  </div>
                 </div>
-                <div className="flex gap-1 bg-black/20 p-1 rounded-xl">
-                  <button
-                    onClick={() => setLearningStyle?.('fun')}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition-all text-xs cursor-pointer ${
-                      learningStyle === 'fun'
-                        ? 'bg-amber-400 text-amber-950 shadow-xs'
-                        : 'text-indigo-200 hover:text-white'
-                    }`}
-                    title="強調趣味：幽默故事、圖像化生動口訣"
-                  >
-                    🎭 強調趣味
-                  </button>
-                  <button
-                    onClick={() => setLearningStyle?.('precise')}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition-all text-xs cursor-pointer ${
-                      learningStyle === 'precise'
-                        ? 'bg-sky-400 text-sky-950 shadow-xs'
-                        : 'text-indigo-200 hover:text-white'
-                    }`}
-                    title="強調精準：結構文法解析、條理清晰"
-                  >
-                    🎯 強調精準
-                  </button>
-                  <button
-                    onClick={() => setLearningStyle?.('quick')}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition-all text-xs cursor-pointer ${
-                      learningStyle === 'quick'
-                        ? 'bg-emerald-400 text-emerald-950 shadow-xs'
-                        : 'text-indigo-200 hover:text-white'
-                    }`}
-                    title="快速複習：極簡 3 大重點列舉、10秒速記"
-                  >
-                    ⚡ 快速複習
-                  </button>
-                </div>
+
+                {/* Pronunciation Diagnosis Button */}
+                <motion.button
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.96 }}
+                  onClick={() => {
+                    if (onOpenPronunciationModal) {
+                      onOpenPronunciationModal();
+                    } else {
+                      handleSendMessage('🎧 請 AI 老師幫我做『發音問題分析』！特別針對聽力練習常錯的音近字（如 ship/sheep, desk/disk, cat/cut, walk/work）進行辨析建議！');
+                    }
+                  }}
+                  className="bg-gradient-to-r from-rose-500 to-amber-500 hover:from-rose-600 hover:to-amber-600 text-white font-black px-2.5 py-1 rounded-xl shadow-xs text-xs flex items-center gap-1 cursor-pointer"
+                >
+                  <Headphones className="w-3.5 h-3.5 text-yellow-300" />
+                  <span>🎧 發音問題分析 (音近字辨析)</span>
+                </motion.button>
               </div>
             </div>
 
             {/* Chat Body */}
-            <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-slate-50">
+            <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-slate-50 dark:bg-slate-950">
               <AnimatePresence initial={false}>
                 {messages.map((msg, idx) => (
                   <motion.div
@@ -327,18 +346,18 @@ export const AiTutorModal: React.FC<AiTutorModalProps> = ({
                       className={`max-w-[80%] rounded-2xl p-3.5 text-xs sm:text-sm leading-relaxed shadow-xs ${
                         msg.role === 'user'
                           ? 'bg-sky-500 text-white font-medium rounded-tr-none'
-                          : 'bg-white text-slate-800 border border-slate-200/80 rounded-tl-none'
+                          : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700 rounded-tl-none'
                       }`}
                     >
                       <div className="whitespace-pre-wrap">{msg.content}</div>
 
                       {msg.role === 'assistant' && (
-                        <div className="mt-2 pt-2 border-t border-slate-100 flex justify-end">
+                        <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700 flex justify-end">
                           <motion.button
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.95 }}
                             onClick={() => handleReadAloud(msg.content)}
-                            className="flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded-lg transition-colors"
+                            className="flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-300 hover:text-indigo-800 dark:hover:text-indigo-200 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-1 rounded-lg transition-colors"
                           >
                             <Volume2 className="w-3.5 h-3.5" /> 朗讀內容
                           </motion.button>
@@ -353,9 +372,9 @@ export const AiTutorModal: React.FC<AiTutorModalProps> = ({
                 <motion.div
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="flex items-center gap-2 text-xs font-bold text-indigo-600 bg-indigo-50 p-3 rounded-2xl w-max"
+                  className="flex items-center gap-2 text-xs font-bold text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 p-3 rounded-2xl w-max"
                 >
-                  <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+                  <Loader2 className="w-4 h-4 animate-spin text-indigo-600 dark:text-indigo-300" />
                   <span>AI 老師思考中...</span>
                 </motion.div>
               )}
@@ -363,13 +382,13 @@ export const AiTutorModal: React.FC<AiTutorModalProps> = ({
             </div>
 
             {/* Mood Stickers Bar */}
-            <div className="px-4 py-2 bg-gradient-to-r from-amber-50/80 via-purple-50/50 to-indigo-50/80 border-t border-slate-100">
+            <div className="px-4 py-2 bg-gradient-to-r from-amber-50/80 via-purple-50/50 to-indigo-50/80 dark:from-slate-900 dark:via-purple-950/30 dark:to-slate-900 border-t border-slate-100 dark:border-slate-800">
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[11px] font-black text-slate-700 flex items-center gap-1">
+                <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 flex items-center gap-1">
                   <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500 animate-pulse" />
                   <span>心情貼紙 Mood Stickers</span>
                 </span>
-                <span className="text-[10px] text-slate-400 font-semibold">點擊貼紙讓 AI 老師為你打氣！</span>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold">點擊貼紙讓 AI 老師為你打氣！</span>
               </div>
               <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
                 {MOOD_STICKERS.map((sticker) => (
@@ -389,7 +408,7 @@ export const AiTutorModal: React.FC<AiTutorModalProps> = ({
             </div>
 
             {/* Preset chips */}
-            <div className="px-4 py-2 bg-white border-t border-slate-100 overflow-x-auto flex gap-1.5 scrollbar-none">
+            <div className="px-4 py-2 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 overflow-x-auto flex gap-1.5 scrollbar-none">
               {PRESET_QUESTIONS.map((q, i) => (
                 <motion.button
                   key={i}
@@ -397,7 +416,7 @@ export const AiTutorModal: React.FC<AiTutorModalProps> = ({
                   whileTap={{ scale: 0.96 }}
                   onClick={() => handleSendMessage(q)}
                   disabled={loading}
-                  className="text-[11px] font-bold whitespace-nowrap bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-xl transition-colors"
+                  className="text-[11px] font-bold whitespace-nowrap bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-2.5 py-1 rounded-xl transition-colors cursor-pointer"
                 >
                   {q}
                 </motion.button>
@@ -405,14 +424,14 @@ export const AiTutorModal: React.FC<AiTutorModalProps> = ({
             </div>
 
             {/* Input Bar */}
-            <div className="p-3 bg-white border-t border-slate-200 flex items-center gap-2">
+            <div className="p-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center gap-2">
               <input
                 type="text"
                 value={inputQuery}
                 onChange={(e) => setInputQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                 placeholder="請輸入英文發音、單字或文法問題..."
-                className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm font-medium focus:outline-hidden focus:border-indigo-500"
+                className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-medium focus:outline-hidden focus:border-indigo-500"
               />
               <motion.button
                 whileHover={inputQuery.trim() && !loading ? { scale: 1.05 } : {}}

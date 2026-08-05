@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Question, QuizResult, GradeLevel } from '../types';
 import { playSpeech } from '../utils/speech';
-import { Volume2, CheckCircle2, XCircle, ArrowRight, RotateCcw, Sparkles, BookPlus, Trophy, Star, Lightbulb, Clock, Download, FileText, Printer, Loader2, BrainCircuit } from 'lucide-react';
+import { Volume2, CheckCircle2, XCircle, ArrowRight, RotateCcw, Sparkles, BookPlus, Trophy, Star, Lightbulb, Clock, Download, FileText, Printer, Loader2, BrainCircuit, Headphones } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
 
@@ -14,6 +14,7 @@ interface QuizRunnerProps {
   onAddMistake: (question: Question, selectedOption: number) => void;
   onRequestAiExplanation: (question: Question, selectedOption: number) => void;
   onRestartQuiz: () => void;
+  onOpenPronunciationModal?: (question?: Question, selectedOptionIndex?: number) => void;
 }
 
 export const QuizRunner: React.FC<QuizRunnerProps> = ({
@@ -24,7 +25,8 @@ export const QuizRunner: React.FC<QuizRunnerProps> = ({
   onFinishQuiz,
   onAddMistake,
   onRequestAiExplanation,
-  onRestartQuiz
+  onRestartQuiz,
+  onOpenPronunciationModal
 }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
@@ -150,10 +152,6 @@ export const QuizRunner: React.FC<QuizRunnerProps> = ({
       setIsAnswerSubmitted(false);
     } else {
       // Quiz complete: answers array already contains all submitted results including the last question
-      const totalCorrect = answers.filter((a) => a.isCorrect).length;
-      const score = Math.round((totalCorrect / questions.length) * 100);
-      const timeSpentSeconds = Math.round((Date.now() - startTime) / 1000);
-
       const userAnswersList = questions.map((q) => {
         const ans = answers.find((a) => a.questionId === q.id) || {
           selectedOption: selectedOption ?? -1,
@@ -166,6 +164,10 @@ export const QuizRunner: React.FC<QuizRunnerProps> = ({
           isCorrect: ans.isCorrect
         };
       });
+
+      const totalCorrect = userAnswersList.filter((a) => a.isCorrect).length;
+      const score = Math.round((totalCorrect / questions.length) * 100);
+      const timeSpentSeconds = Math.round((Date.now() - startTime) / 1000);
 
       const finalResult: QuizResult = {
         id: `result-${Date.now()}`,
@@ -456,9 +458,9 @@ export const QuizRunner: React.FC<QuizRunnerProps> = ({
           transition={{ duration: 0.25, ease: 'easeInOut' }}
         >
           {/* Question Box */}
-          <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-5 sm:p-6 mb-6 relative">
+          <div className="bg-slate-50/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 sm:p-6 mb-6 relative">
             <div className="flex items-start justify-between gap-3">
-              <h2 className="text-lg sm:text-xl font-bold text-slate-800 leading-relaxed">
+              <h2 className="text-lg sm:text-xl font-bold text-slate-800 dark:text-slate-100 leading-relaxed">
                 {currentQuestion.question}
               </h2>
 
@@ -468,7 +470,7 @@ export const QuizRunner: React.FC<QuizRunnerProps> = ({
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => handlePlayAudio(currentQuestion.audioText || currentQuestion.question)}
-                  className="flex-shrink-0 flex items-center gap-1 bg-sky-100 hover:bg-sky-200 text-sky-700 px-3 py-2 rounded-xl text-xs font-bold transition-all"
+                  className="flex-shrink-0 flex items-center gap-1 bg-sky-100 dark:bg-sky-950/80 hover:bg-sky-200 dark:hover:bg-sky-900 text-sky-700 dark:text-sky-300 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
                   title="點擊聽英文朗讀"
                 >
                   <Volume2 className="w-4 h-4" />
@@ -479,8 +481,8 @@ export const QuizRunner: React.FC<QuizRunnerProps> = ({
 
             {/* Optional Audio prompt banner */}
             {currentQuestion.audioText && (
-              <div className="mt-3 inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 px-3 py-1.5 rounded-xl text-xs font-medium">
-                <Volume2 className="w-3.5 h-3.5 text-amber-600" />
+              <div className="mt-3 inline-flex items-center gap-2 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 px-3 py-1.5 rounded-xl text-xs font-medium">
+                <Volume2 className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                 <span>聽力內容："<strong>{currentQuestion.audioText}</strong>"</span>
               </div>
             )}
@@ -490,19 +492,19 @@ export const QuizRunner: React.FC<QuizRunnerProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
             {currentQuestion.options.map((option, idx) => {
               const optionLetter = String.fromCharCode(65 + idx); // A, B, C, D
-              let buttonStyle = 'bg-white border-slate-200 text-slate-700 hover:border-sky-300 hover:bg-sky-50/50';
+              let buttonStyle = 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:border-sky-300 hover:bg-sky-50/50 dark:hover:bg-slate-800';
 
               if (selectedOption === idx) {
-                buttonStyle = 'bg-sky-100 border-sky-500 text-sky-900 font-bold ring-2 ring-sky-300';
+                buttonStyle = 'bg-sky-100 dark:bg-sky-950/80 border-sky-500 text-sky-900 dark:text-sky-200 font-bold ring-2 ring-sky-300 dark:ring-sky-800';
               }
 
               if (isAnswerSubmitted) {
                 if (idx === currentQuestion.answerIndex) {
-                  buttonStyle = 'bg-emerald-100 border-emerald-500 text-emerald-900 font-bold ring-2 ring-emerald-300';
+                  buttonStyle = 'bg-emerald-100 dark:bg-emerald-950/80 border-emerald-500 text-emerald-900 dark:text-emerald-200 font-bold ring-2 ring-emerald-300 dark:ring-emerald-800';
                 } else if (selectedOption === idx && !isCorrect) {
-                  buttonStyle = 'bg-rose-100 border-rose-500 text-rose-900 font-bold ring-2 ring-rose-300';
+                  buttonStyle = 'bg-rose-100 dark:bg-rose-950/80 border-rose-500 text-rose-900 dark:text-rose-200 font-bold ring-2 ring-rose-300 dark:ring-rose-800';
                 } else {
-                  buttonStyle = 'bg-slate-50 border-slate-200 text-slate-400 opacity-60';
+                  buttonStyle = 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-600 opacity-60';
                 }
               }
 
@@ -547,18 +549,20 @@ export const QuizRunner: React.FC<QuizRunnerProps> = ({
             exit={{ opacity: 0, y: -10 }}
             transition={{ type: 'spring', damping: 25, stiffness: 350 }}
             className={`p-5 rounded-2xl border mb-6 transition-all ${
-              isCorrect ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950' : 'bg-rose-50/80 border-rose-200 text-rose-950'
+              isCorrect
+                ? 'bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-950 dark:text-emerald-200'
+                : 'bg-rose-50/80 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-950 dark:text-rose-200'
             }`}
           >
             <div className="flex items-center gap-2 font-black text-base mb-2">
               {isCorrect ? (
                 <>
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                   <span>答對了！太厲害了！🎉</span>
                 </>
               ) : (
                 <>
-                  <XCircle className="w-5 h-5 text-rose-600" />
+                  <XCircle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
                   <span>答錯囉！沒關係，我們一起學起來！加油！💪</span>
                 </>
               )}
@@ -570,22 +574,32 @@ export const QuizRunner: React.FC<QuizRunnerProps> = ({
             </p>
 
             {currentQuestion.tips && (
-              <div className="flex items-center gap-2 bg-white/80 border border-amber-200 p-2.5 rounded-xl text-xs text-amber-900 font-semibold mb-3">
+              <div className="flex items-center gap-2 bg-white/80 dark:bg-slate-900/80 border border-amber-200 dark:border-amber-800/80 p-2.5 rounded-xl text-xs text-amber-900 dark:text-amber-200 font-semibold mb-3">
                 <Lightbulb className="w-4 h-4 text-amber-500 flex-shrink-0" />
                 <span>記憶小秘訣：{currentQuestion.tips}</span>
               </div>
             )}
 
             {/* AI Explanation & Add to Mistakes action */}
-            <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-200/60">
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200/60">
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={() => onRequestAiExplanation(currentQuestion, selectedOption ?? -1)}
-                className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-xs transition-colors"
+                className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-xs transition-colors cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
-                請 AI 老師補充詳細說明
+                <span>請 AI 老師補充詳細說明</span>
+              </motion.button>
+
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => onOpenPronunciationModal?.(currentQuestion, selectedOption ?? -1)}
+                className="flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black px-3 py-1.5 rounded-xl shadow-xs transition-colors cursor-pointer"
+              >
+                <Headphones className="w-3.5 h-3.5 text-yellow-300" />
+                <span>🎧 AI 發音問題分析</span>
               </motion.button>
 
               {!isCorrect && (

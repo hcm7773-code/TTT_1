@@ -1,17 +1,19 @@
 import React, { useState, useMemo } from 'react';
 import { GradeLevel, Question, QuizResult } from '../types';
-import { Sparkles, Loader2, Wand2, Zap, TrendingUp, ShieldCheck, ArrowUpRight } from 'lucide-react';
+import { Sparkles, Loader2, Wand2, Zap, TrendingUp, ShieldCheck, ArrowUpRight, Heart } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface AiQuizGeneratorProps {
   grade: GradeLevel;
   quizResults?: QuizResult[];
+  topicPreference?: string;
   onQuestionsGenerated: (questions: Question[], title: string) => void;
 }
 
 export const AiQuizGenerator: React.FC<AiQuizGeneratorProps> = ({
   grade,
   quizResults = [],
+  topicPreference,
   onQuestionsGenerated
 }) => {
   const [selectedTopic, setSelectedTopic] = useState('日常單字與基礎句型');
@@ -67,7 +69,8 @@ export const AiQuizGenerator: React.FC<AiQuizGeneratorProps> = ({
           topic: topicToUse,
           count,
           adaptiveBoost: isAdaptiveBoostActive,
-          recentAccuracy
+          recentAccuracy,
+          topicPreference
         })
       });
 
@@ -227,6 +230,22 @@ export const AiQuizGenerator: React.FC<AiQuizGeneratorProps> = ({
           </span>
         </div>
       </motion.div>
+
+      {/* Topic Preference Badge Banner */}
+      {topicPreference && (
+        <div className="bg-gradient-to-r from-rose-50 via-pink-50 to-purple-50 border border-rose-200 rounded-2xl p-3.5 mb-6 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-xs font-bold text-rose-950">
+            <Heart className="w-4 h-4 text-rose-600 fill-rose-500/30" />
+            <span>個人化學習喜好連動中：</span>
+            <span className="bg-rose-600 text-white font-black px-2.5 py-0.5 rounded-lg text-xs shadow-2xs">
+              {topicPreference}
+            </span>
+          </div>
+          <span className="text-[11px] text-slate-500 font-medium">
+            ✨ AI 出題將自動優先融入專屬單字與情境
+          </span>
+        </div>
+      )}
 
       {/* Grade Indicator */}
       <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 mb-6 flex items-center justify-between">

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GradeLevel, Flashcard } from '../types';
 import { FLASHCARDS_DATA } from '../data/flashcards';
 import { playSpeech } from '../utils/speech';
@@ -18,7 +18,19 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({ grade, speechSpe
   const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
 
   // Spaced Repetition Memory Levels state (cardId -> level 0: 1天, 1: 3天, 2: 7天, 3: 30天長期)
-  const [cardLevels, setCardLevels] = useState<Record<string, number>>({});
+  const [cardLevels, setCardLevels] = useState<Record<string, number>>(() => {
+    try {
+      const saved = localStorage.getItem('elem_eng_card_levels');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('elem_eng_card_levels', JSON.stringify(cardLevels));
+  }, [cardLevels]);
+
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const handleLevelUp = (cardId: string, word: string) => {

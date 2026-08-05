@@ -16,8 +16,10 @@ import { MistakesView } from './components/MistakesView';
 import { AchievementsView } from './components/AchievementsView';
 import { DailyChallengeCard } from './components/DailyChallengeCard';
 import { TodayFocusCard } from './components/TodayFocusCard';
+import { AiLearningPathCard } from './components/AiLearningPathCard';
 import { BlindSpotCard } from './components/BlindSpotCard';
 import { QuickAskBar } from './components/QuickAskBar';
+import { PronunciationAnalysisModal } from './components/PronunciationAnalysisModal';
 import { Sparkles, Loader2, X, Volume2, BookOpen, Clock, Brain, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { playSpeech } from './utils/speech';
@@ -40,9 +42,40 @@ export default function App() {
     return (saved as LearningStyle) || 'fun';
   });
 
+  // Dark/Light Theme Mode State
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('elem_eng_theme');
+    if (saved) return saved === 'dark';
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('elem_eng_theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('elem_eng_theme', 'light');
+    }
+  }, [isDarkMode]);
+
+  const toggleDarkMode = () => {
+    setIsDarkMode((prev) => !prev);
+  };
+
   const handleSetLearningStyle = (style: LearningStyle) => {
     setLearningStyle(style);
     localStorage.setItem('elem_eng_learning_style', style);
+  };
+
+  // Learning Topic Preference (e.g. 動物, 太空, 運動, 食物)
+  const [topicPreference, setTopicPreference] = useState<string>(() => {
+    return localStorage.getItem('elem_eng_topic_pref') || '🐶 動物與寵物';
+  });
+
+  const handleSetTopicPreference = (pref: string) => {
+    setTopicPreference(pref);
+    localStorage.setItem('elem_eng_topic_pref', pref);
   };
 
   const [quizQuestions, setQuizQuestions] = useState<Question[]>([]);
@@ -82,6 +115,20 @@ export default function App() {
   });
 
   const [aiTutorOpen, setAiTutorOpen] = useState(false);
+  const [pronunciationModal, setPronunciationModal] = useState<{
+    isOpen: boolean;
+    question?: Question;
+    selectedOptionIndex?: number;
+  }>({ isOpen: false });
+
+  const handleOpenPronunciationModal = (question?: Question, selectedOptionIndex?: number) => {
+    setPronunciationModal({
+      isOpen: true,
+      question,
+      selectedOptionIndex
+    });
+  };
+
   const [aiExplainModal, setAiExplainModal] = useState<{
     isOpen: boolean;
     question: Question | null;
@@ -265,6 +312,13 @@ export default function App() {
     setActiveTab('quiz');
   };
 
+  const handleStartUnitPractice = (questions: Question[], title: string) => {
+    setQuizQuestions(questions);
+    setQuizTitle(title);
+    setActiveTab('quiz');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   // Request AI Question Explanation
   const handleRequestAiExplanation = async (question: Question, selectedOption: number) => {
     setAiExplainModal({
@@ -314,7 +368,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans selection:bg-sky-200">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col font-sans selection:bg-sky-200 transition-colors duration-300">
       {/* Top Header & Navbar */}
       <Header
         activeTab={activeTab}
@@ -329,13 +383,26 @@ export default function App() {
         quizResults={quizResults}
         learningStyle={learningStyle}
         setLearningStyle={handleSetLearningStyle}
+        topicPreference={topicPreference}
+        setTopicPreference={handleSetTopicPreference}
         mistakes={mistakes}
+        isDarkMode={isDarkMode}
+        toggleDarkMode={toggleDarkMode}
       />
 
       {/* Main Content Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-4 sm:py-6 pb-24">
         {activeTab === 'quiz' && (
           <div>
+            {/* AI Learning Path Recommendations Component */}
+            <AiLearningPathCard
+              grade={grade}
+              quizResults={quizResults}
+              mistakes={mistakes}
+              onStartUnitPractice={handleStartUnitPractice}
+              onNavigateTab={(tab) => setActiveTab(tab)}
+            />
+
             <TodayFocusCard
               grade={grade}
               mistakes={mistakes}
@@ -365,6 +432,7 @@ export default function App() {
                 setQuizQuestions(filtered.length > 0 ? filtered : DEFAULT_QUESTIONS);
                 setQuizTitle(`國小${grade === 'low' ? '低年級' : grade === 'mid' ? '中年級' : '高年級'}英語綜合測驗`);
               }}
+              onOpenPronunciationModal={handleOpenPronunciationModal}
             />
           </div>
         )}
@@ -373,6 +441,7 @@ export default function App() {
           <AiQuizGenerator
             grade={grade}
             quizResults={quizResults}
+            topicPreference={topicPreference}
             onQuestionsGenerated={handleAiQuestionsGenerated}
           />
         )}
@@ -404,6 +473,7 @@ export default function App() {
               onClearAllMistakes={handleClearAllMistakes}
               onStartRetest={handleStartRetest}
               onRequestAiExplanation={handleRequestAiExplanation}
+              onOpenPronunciationModal={handleOpenPronunciationModal}
             />
           </div>
         )}
@@ -415,6 +485,8 @@ export default function App() {
             grade={grade}
             mistakes={mistakes}
             speechSpeed={speechSpeed}
+            learningStyle={learningStyle}
+            setLearningStyle={handleSetLearningStyle}
           />
         )}
       </main>
@@ -428,6 +500,32 @@ export default function App() {
         mistakes={mistakes}
         quizResults={quizResults}
         onRecordMood={handleRecordMood}
+        learningStyle={learningStyle}
+        setLearningStyle={handleSetLearningStyle}
+        onOpenPronunciationModal={handleOpenPronunciationModal}
+      />
+
+      {/* AI Pronunciation Problem Analysis Modal */}
+      <PronunciationAnalysisModal
+        isOpen={pronunciationModal.isOpen}
+        onClose={() => setPronunciationModal((prev) => ({ ...prev, isOpen: false }))}
+        grade={grade}
+        speechSpeed={speechSpeed}
+        question={pronunciationModal.question}
+        selectedOptionIndex={pronunciationModal.selectedOptionIndex}
+        listeningMistakes={mistakes.filter((m) => {
+          const cat = (m.question.category || '').toLowerCase();
+          const qText = (m.question.question || '').toLowerCase();
+          return (
+            cat.includes('聽力') ||
+            cat.includes('listening') ||
+            cat.includes('audio') ||
+            cat.includes('發音') ||
+            cat.includes('phonics') ||
+            qText.includes('聽') ||
+            !!m.question.audioText
+          );
+        })}
         learningStyle={learningStyle}
         setLearningStyle={handleSetLearningStyle}
       />
@@ -574,7 +672,7 @@ export default function App() {
       />
 
       {/* Footer */}
-      <footer className="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-400 mt-auto pb-20 sm:pb-4">
+      <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 py-4 text-center text-xs text-slate-400 dark:text-slate-500 mt-auto pb-20 sm:pb-4 transition-colors">
         國小線上英語練習測驗平台 ・ 專為國小英語學習設計 ・ 結合 Gemini AI 智慧輔導發音與文法
       </footer>
     </div>

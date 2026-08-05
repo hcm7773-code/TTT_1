@@ -224,7 +224,7 @@ function getFallbackQuestions(grade: string, topic: string, count: number = 5) {
 
 // AI Quiz Generator Endpoint
 app.post("/api/gemini/generate-quiz", async (req, res) => {
-  const { grade = "mid", topic = "日常單字與基礎句型", count = 5, adaptiveBoost = false, recentAccuracy = 0 } = req.body;
+  const { grade = "mid", topic = "日常單字與基礎句型", count = 5, adaptiveBoost = false, recentAccuracy = 0, topicPreference = "" } = req.body;
 
   try {
     const ai = getGeminiClient();
@@ -241,7 +241,12 @@ app.post("/api/gemini/generate-quiz", async (req, res) => {
       adaptivePrompt = `\n【🔥 自適應難度升級指示】：檢測到學生過去測驗表現卓越（近期平均正確率高達 ${recentAccuracy || 90}%）！請在本次出題中大幅增加【進階句型理解與延伸詞彙】的比重（佔比 60% 以上），例如加入情境複合句、比較級/最高級、時態變化或進階日常會話，為學生提供更具挑戰性與成就感的內容！`;
     }
 
-    const prompt = `你是一位專業且活潑的台灣國小英語教師。請為「${gradeLabel}」程度的學生，針對主題「${topic}」設計 ${count} 道豐富多樣的英文練習題。${adaptivePrompt}
+    let prefPrompt = "";
+    if (topicPreference && topicPreference !== '無特殊偏好') {
+      prefPrompt = `\n【🎨 學生個人主題喜好】：學生最喜歡「${topicPreference}」主題！請盡量將題目中的例句角色、單字情境、對話背景或聽力文本融入與「${topicPreference}」相關的英文元素（例如相關的動物、太空、體育運動、食物、冒險單字或故事情境），讓出題充滿個性化樂趣！`;
+    }
+
+    const prompt = `你是一位專業且活潑的台灣國小英語教師。請為「${gradeLabel}」程度的學生，針對主題「${topic}」設計 ${count} 道豐富多樣的英文練習題。${adaptivePrompt}${prefPrompt}
 題目類型包含：單字選擇、聽力辨識（標註音訊朗讀文字）、日常生活對話填空、基礎文法選擇與短句理解。
 語言要求：題目英文為主，提示與解析必須為繁體中文，適合國小學生理解。`;
 
@@ -485,6 +490,85 @@ ${styleInstruction}
 💡 **記憶小秘訣**：放在真實生活中講出來，記憶效果翻倍！`;
 
     res.json({ success: true, isFallback: true, result: fallbackResult });
+  }
+});
+
+// AI Pronunciation & Listening Minimal Pair Analysis Endpoint
+app.post("/api/gemini/pronunciation-analysis", async (req, res) => {
+  const { pairOrQuestion, questionDetails, grade = "mid", learningStyle = "fun" } = req.body;
+
+  try {
+    const ai = getGeminiClient();
+
+    let styleInstruction = "";
+    if (learningStyle === "precise") {
+      styleInstruction = `學習風格【強調精準】：
+1. 嚴謹標註兩者的 KK 音標/IPA 與聲帶發聲構造差異。
+2. 精確的口腔嘴型（舌頭位置、唇形開合、氣流強弱）發音動作拆解。
+3. 條理分明的聽力測驗題型辨析步驟與考點防錯說明。`;
+    } else if (learningStyle === "quick") {
+      styleInstruction = `學習風格【快速複習】：
+1. 用極簡 3 個重點精華列舉兩字發音差別。
+2. 10 秒即學即用的口訣。
+3. 2 句極簡標準美式英文例句。`;
+    } else {
+      styleInstruction = `學習風格【強調趣味】：
+1. 用幽默可愛的擬人想像故事比較這兩個音近字（如 ship 像小船快跑、sheep 像綿羊長笑）。
+2. 搭配豐富生動的 Emoji 圖像聯想。
+3. 超好記的童趣口訣與有愛的發音練習鼓勵！`;
+    }
+
+    const questionInfo = questionDetails
+      ? `題目細節：${questionDetails.questionText || ''} (音訊文本: "${questionDetails.audioText || ''}")，正確答案: ${questionDetails.correctAnswer || ''}，學生選擇: ${questionDetails.userAnswer || '未選擇'}`
+      : `發音對比標的：${pairOrQuestion}`;
+
+    const prompt = `你是一位專業的「國小英語 AI 發音與聽力診斷專家」。
+學生正在進行聽力練習與音近字辨析。
+分析標的：${pairOrQuestion}
+${questionInfo}
+年級程度：${grade}。
+
+${styleInstruction}
+
+請為學生撰寫一份親切、極具啟發性的「發音問題診斷與音近字辨析建議」（使用繁體中文），結構要求包含：
+
+1. 🎙️ **音近字嘴型與 Phonics 發音差異對比** (明確對比發音長短、嘴型開合、舌頭位置)
+2. 👂 **聽力練習常錯陷阱與聽覺辨識技巧** (告訴國小學生在聽力測驗中如何一聽就分出來)
+3. 🗣️ **美式標準發音示範例句** (提供 2 句包含這些字詞的實用英文例句)
+4. 💡 **AI 小老師專屬速記口訣** (一句話好記口訣，協助永久記憶)
+
+請確保語氣溫暖親切，適合國小生閱讀！`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.6-flash",
+      contents: prompt,
+      config: {
+        systemInstruction: "你是一位專門分析國小生英語發音混淆、聽力音近字辨析的 AI 小老師，回答一律使用繁體中文。"
+      }
+    });
+
+    res.json({ success: true, analysis: response.text });
+  } catch (error: any) {
+    console.warn("Pronunciation Analysis API limit / Error. Returning smart local fallback analysis:", error?.message || error);
+
+    const fallbackAnalysis = `🎧 **【AI 聽力發音問題診斷與音近字辨析：${pairOrQuestion}】**
+
+1. 🎙️ **發音嘴型與 Phonics 差異對比**：
+   • 正確發音目標在母音張口度與音長上有細微差異！
+   • 建議練習時觀察「嘴巴開合大小」與「聲音是否短促拉長」。
+
+2. 👂 **聽力辨識防錯技巧**：
+   • 國小聽力測驗中最容易因為「長短母音」或「齒音/唇音」混淆！
+   • 聽到語音時，先抓住關鍵單字開頭與結尾的聲響。
+
+3. 🗣️ **美式發音對照例句**：
+   • *"Please listen carefully to the word ${pairOrQuestion}."*
+   • *"Practice makes perfect when learning English phonics!"*
+
+4. 💡 **AI 老師口訣**：
+   「嘴型放對位置，發音清清楚楚，聽力測驗拿滿分！」💪`;
+
+    res.json({ success: true, isFallback: true, analysis: fallbackAnalysis });
   }
 });
 

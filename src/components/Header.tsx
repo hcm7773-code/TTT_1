@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { GradeLevel, UserStats, QuizResult, LearningStyle, MistakeItem } from '../types';
-import { BookOpen, Sparkles, Volume2, Award, BookMarked, HelpCircle, Layers, Flame, Brain, TrendingUp, X, Target, Zap, CheckCircle2, ShieldCheck, Sliders, Settings, Compass, Bell, BellRing, CheckCheck, Trash2, ArrowRight, Clock, AlertTriangle } from 'lucide-react';
+import { BookOpen, Sparkles, Volume2, Award, BookMarked, HelpCircle, Layers, Flame, Brain, TrendingUp, X, Target, Zap, CheckCircle2, ShieldCheck, Sliders, Settings, Compass, Bell, BellRing, CheckCheck, Trash2, ArrowRight, Clock, AlertTriangle, Heart, Palette, Sun, Moon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface HeaderProps {
@@ -16,7 +16,11 @@ interface HeaderProps {
   quizResults: QuizResult[];
   learningStyle: LearningStyle;
   setLearningStyle: (style: LearningStyle) => void;
+  topicPreference?: string;
+  setTopicPreference?: (pref: string) => void;
   mistakes?: MistakeItem[];
+  isDarkMode?: boolean;
+  toggleDarkMode?: () => void;
 }
 
 interface NotificationItem {
@@ -45,10 +49,16 @@ export const Header: React.FC<HeaderProps> = ({
   quizResults,
   learningStyle,
   setLearningStyle,
-  mistakes = []
+  topicPreference = '🐶 動物與寵物',
+  setTopicPreference,
+  mistakes = [],
+  isDarkMode = false,
+  toggleDarkMode
 }) => {
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [topicModalOpen, setTopicModalOpen] = useState(false);
+  const [customTopicInput, setCustomTopicInput] = useState('');
   const [adaptiveMode, setAdaptiveMode] = useState<'auto' | 'foundation' | 'challenge'>('auto');
 
   // AI Notification Center States
@@ -204,36 +214,36 @@ export const Header: React.FC<HeaderProps> = ({
   }, [stats, adaptiveMode]);
 
   return (
-    <header className="bg-white/90 backdrop-blur-md border-b border-sky-100 sticky top-0 z-30 shadow-xs">
+    <header className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-sky-100 dark:border-slate-800 sticky top-0 z-30 shadow-xs transition-colors duration-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Top bar */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between py-3 gap-3">
           {/* Logo & App Title */}
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-sky-200">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-sky-200 dark:shadow-none">
               <BookOpen className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-black text-slate-800 tracking-tight">國小線上英語練習測驗</h1>
-                <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-2 py-0.5 rounded-full border border-emerald-200">
+                <h1 className="text-xl font-black text-slate-800 dark:text-slate-100 tracking-tight">國小線上英語練習測驗</h1>
+                <span className="bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-300 text-emerald-800 text-xs font-bold px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
                   快樂學英文
                 </span>
               </div>
-              <p className="text-xs text-slate-500">低 / 中 / 高年級單字・文法・聽力・AI 智慧診斷</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">低 / 中 / 高年級單字・文法・聽力・AI 智慧診斷</p>
             </div>
           </div>
 
           {/* Controls: Grade selector, Speech speed, AI Level, Streak, AI Tutor */}
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             {/* Grade Selector */}
-            <div className="bg-slate-100 p-1 rounded-xl flex items-center text-xs font-semibold">
+            <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex items-center text-xs font-semibold border border-slate-200/60 dark:border-slate-700/60">
               <button
                 onClick={() => setGrade('low')}
                 className={`px-2.5 py-1.5 rounded-lg transition-all ${
                   grade === 'low'
                     ? 'bg-sky-500 text-white shadow-xs font-bold'
-                    : 'text-slate-600 hover:text-slate-900'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 低年級 (1-2)
@@ -243,7 +253,7 @@ export const Header: React.FC<HeaderProps> = ({
                 className={`px-2.5 py-1.5 rounded-lg transition-all ${
                   grade === 'mid'
                     ? 'bg-sky-500 text-white shadow-xs font-bold'
-                    : 'text-slate-600 hover:text-slate-900'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 中年級 (3-4)
@@ -253,7 +263,7 @@ export const Header: React.FC<HeaderProps> = ({
                 className={`px-2.5 py-1.5 rounded-lg transition-all ${
                   grade === 'high'
                     ? 'bg-sky-500 text-white shadow-xs font-bold'
-                    : 'text-slate-600 hover:text-slate-900'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 高年級 (5-6)
@@ -263,12 +273,12 @@ export const Header: React.FC<HeaderProps> = ({
             {/* AI Adaptive Difficulty Level Indicator Badge */}
             <button
               onClick={() => setDashboardOpen(true)}
-              className="flex items-center gap-1.5 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 hover:border-purple-300 text-purple-900 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer active:scale-95"
+              className="flex items-center gap-1.5 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-slate-800 dark:to-purple-950/50 border border-purple-200 dark:border-purple-800/80 hover:border-purple-300 text-purple-900 dark:text-purple-200 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer active:scale-95"
               title="點擊查看 AI 測驗難度成長儀表板"
             >
-              <Brain className="w-3.5 h-3.5 text-purple-600 animate-pulse" />
-              <span className="text-slate-600 font-medium hidden sm:inline">AI 難度:</span>
-              <span className="bg-purple-100 text-purple-900 border border-purple-200 px-2 py-0.5 rounded-lg font-black flex items-center gap-1">
+              <Brain className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 animate-pulse" />
+              <span className="text-slate-600 dark:text-slate-400 font-medium hidden sm:inline">AI 難度:</span>
+              <span className="bg-purple-100 dark:bg-purple-950 text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800 px-2 py-0.5 rounded-lg font-black flex items-center gap-1">
                 <span>{levelInfo.icon}</span>
                 <span>{levelInfo.name}</span>
               </span>
@@ -277,12 +287,12 @@ export const Header: React.FC<HeaderProps> = ({
             {/* AI Learning Style Button */}
             <button
               onClick={() => setSettingsOpen(true)}
-              className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 hover:border-emerald-300 text-emerald-900 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer active:scale-95"
+              className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-slate-800 dark:to-emerald-950/50 border border-emerald-200 dark:border-emerald-800/80 hover:border-emerald-300 text-emerald-900 dark:text-emerald-200 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer active:scale-95"
               title="點擊設定 AI 學習風格與教學習慣"
             >
-              <Sliders className="w-3.5 h-3.5 text-emerald-600" />
-              <span className="text-slate-600 font-medium hidden sm:inline">AI 風格:</span>
-              <span className="bg-emerald-100/90 text-emerald-950 border border-emerald-200 px-2 py-0.5 rounded-lg font-black">
+              <Sliders className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span className="text-slate-600 dark:text-slate-400 font-medium hidden sm:inline">AI 風格:</span>
+              <span className="bg-emerald-100/90 dark:bg-emerald-950 text-emerald-950 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-lg font-black">
                 {learningStyle === 'fun'
                   ? '🎭 強調趣味'
                   : learningStyle === 'precise'
@@ -291,20 +301,58 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             </button>
 
+            {/* AI Learning Topic Preference Button */}
+            <button
+              onClick={() => setTopicModalOpen(true)}
+              className="flex items-center gap-1.5 bg-gradient-to-r from-pink-50 to-rose-50 dark:from-slate-800 dark:to-rose-950/50 border border-rose-200 dark:border-rose-800/80 hover:border-rose-300 text-rose-900 dark:text-rose-200 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer active:scale-95"
+              title="點擊設定個人學習喜好主題（AI 出題將自動帶入專屬單字與情境）"
+            >
+              <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500/30" />
+              <span className="text-slate-600 dark:text-slate-400 font-medium hidden sm:inline">學習喜好:</span>
+              <span className="bg-rose-100/90 dark:bg-rose-950 text-rose-950 dark:text-rose-200 border border-rose-200 dark:border-rose-800 px-2 py-0.5 rounded-lg font-black truncate max-w-[110px]">
+                {topicPreference}
+              </span>
+            </button>
+
             {/* Speech speed setting */}
-            <div className="flex items-center gap-1 bg-amber-50 border border-amber-200 text-amber-900 px-2.5 py-1 rounded-xl text-xs">
-              <Volume2 className="w-3.5 h-3.5 text-amber-600" />
+            <div className="flex items-center gap-1 bg-amber-50 dark:bg-slate-800 border border-amber-200 dark:border-amber-800/80 text-amber-900 dark:text-amber-200 px-2.5 py-1 rounded-xl text-xs">
+              <Volume2 className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
               <span className="font-medium hidden sm:inline">發音語速:</span>
               <button
                 onClick={() => setSpeechSpeed(speechSpeed === 0.85 ? 1.0 : 0.85)}
-                className="font-bold bg-amber-200/60 px-1.5 py-0.5 rounded hover:bg-amber-200 cursor-pointer"
+                className="font-bold bg-amber-200/60 dark:bg-amber-950/80 px-1.5 py-0.5 rounded hover:bg-amber-200 dark:hover:bg-amber-900 cursor-pointer"
               >
                 {speechSpeed === 0.85 ? '🐢 慢速 (0.85x)' : '⚡ 標準 (1.0x)'}
               </button>
             </div>
 
+            {/* Dark / Light Theme Toggle Button */}
+            <motion.button
+              whileHover={{ scale: 1.06 }}
+              whileTap={{ scale: 0.94 }}
+              onClick={toggleDarkMode}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all border shadow-sm cursor-pointer ${
+                isDarkMode
+                  ? 'bg-slate-800 text-amber-300 border-amber-400/50 hover:bg-slate-700 ring-2 ring-amber-400/30'
+                  : 'bg-gradient-to-r from-amber-100 to-yellow-100 text-slate-800 border-amber-300 hover:from-amber-200 hover:to-yellow-200 ring-2 ring-amber-300/40'
+              }`}
+              title={isDarkMode ? '切換為淺色模式' : '切換為深色模式'}
+            >
+              {isDarkMode ? (
+                <>
+                  <Sun className="w-4 h-4 text-amber-400 fill-amber-400 animate-spin-slow" />
+                  <span>☀️ 淺色模式</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="w-4 h-4 text-indigo-700 fill-indigo-600/30" />
+                  <span>🌙 深色模式</span>
+                </>
+              )}
+            </motion.button>
+
             {/* Streak */}
-            <div className="flex items-center gap-1 bg-orange-50 border border-orange-200 text-orange-700 px-2.5 py-1 rounded-xl text-xs font-bold">
+            <div className="flex items-center gap-1 bg-orange-50 dark:bg-slate-800 border border-orange-200 dark:border-orange-800/80 text-orange-700 dark:text-orange-300 px-2.5 py-1 rounded-xl text-xs font-bold">
               <Flame className="w-3.5 h-3.5 text-orange-500 fill-orange-500" />
               <span>連續 {streakDays} 天</span>
             </div>
@@ -451,13 +499,13 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Navigation Tabs */}
-        <nav className="flex space-x-1 sm:space-x-2 overflow-x-auto py-2 border-t border-slate-100 scrollbar-none">
+        <nav className="flex space-x-1 sm:space-x-2 overflow-x-auto py-2 border-t border-slate-100 dark:border-slate-800 scrollbar-none">
           <button
             onClick={() => setActiveTab('quiz')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-colors ${
               activeTab === 'quiz'
                 ? 'bg-sky-500 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-sky-50 hover:text-sky-600'
+                : 'text-slate-600 dark:text-slate-300 hover:bg-sky-50 dark:hover:bg-slate-800 hover:text-sky-600 dark:hover:text-sky-300'
             }`}
           >
             <HelpCircle className="w-4 h-4" />
@@ -469,7 +517,7 @@ export const Header: React.FC<HeaderProps> = ({
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-colors ${
               activeTab === 'ai-generator'
                 ? 'bg-purple-600 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-purple-50 hover:text-purple-600'
+                : 'text-slate-600 dark:text-slate-300 hover:bg-purple-50 dark:hover:bg-slate-800 hover:text-purple-600 dark:hover:text-purple-300'
             }`}
           >
             <Sparkles className="w-4 h-4 text-yellow-300" />
@@ -481,7 +529,7 @@ export const Header: React.FC<HeaderProps> = ({
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-colors ${
               activeTab === 'flashcards'
                 ? 'bg-emerald-600 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-600'
+                : 'text-slate-600 dark:text-slate-300 hover:bg-emerald-50 dark:hover:bg-slate-800 hover:text-emerald-600 dark:hover:text-emerald-300'
             }`}
           >
             <Layers className="w-4 h-4" />
@@ -493,7 +541,7 @@ export const Header: React.FC<HeaderProps> = ({
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-colors ${
               activeTab === 'grammar'
                 ? 'bg-indigo-600 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-indigo-50 hover:text-indigo-600'
+                : 'text-slate-600 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-slate-800 hover:text-indigo-600 dark:hover:text-indigo-300'
             }`}
           >
             <BookOpen className="w-4 h-4" />
@@ -505,7 +553,7 @@ export const Header: React.FC<HeaderProps> = ({
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-colors ${
               activeTab === 'mistakes'
                 ? 'bg-rose-500 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-rose-50 hover:text-rose-600'
+                : 'text-slate-600 dark:text-slate-300 hover:bg-rose-50 dark:hover:bg-slate-800 hover:text-rose-600 dark:hover:text-rose-300'
             }`}
           >
             <BookMarked className="w-4 h-4" />
@@ -517,7 +565,7 @@ export const Header: React.FC<HeaderProps> = ({
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-colors ${
               activeTab === 'achievements'
                 ? 'bg-amber-500 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-amber-50 hover:text-amber-600'
+                : 'text-slate-600 dark:text-slate-300 hover:bg-amber-50 dark:hover:bg-slate-800 hover:text-amber-600 dark:hover:text-amber-300'
             }`}
           >
             <Award className="w-4 h-4" />
@@ -848,6 +896,171 @@ export const Header: React.FC<HeaderProps> = ({
                   className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer"
                 >
                   完成設定
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Topic Preference Modal: Learning Theme Selection */}
+        {topicModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-3xl border border-rose-100 shadow-2xl w-full max-w-xl p-6 max-h-[90vh] overflow-y-auto"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-rose-500 to-pink-600 flex items-center justify-center text-white shadow-md shadow-rose-200">
+                    <Heart className="w-5 h-5 fill-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-slate-800 text-lg flex items-center gap-2">
+                      學習喜好設定 (Topic Preferences)
+                    </h3>
+                    <p className="text-xs text-slate-500">選擇最感興趣的主題，AI 出題將為你融入專屬單字與趣味情境！</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setTopicModalOpen(false)}
+                  className="p-1.5 rounded-xl hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Current Active Indicator */}
+              <div className="bg-gradient-to-r from-rose-50 via-pink-50 to-purple-50 border border-rose-200 rounded-2xl p-3.5 mb-5 flex items-center justify-between text-xs font-bold text-rose-950">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-rose-600 animate-pulse" />
+                  <span>目前已鎖定主題喜好：</span>
+                  <span className="bg-rose-600 text-white font-black px-2.5 py-0.5 rounded-lg">
+                    {topicPreference}
+                  </span>
+                </div>
+                <span className="text-[11px] text-slate-500 font-medium hidden sm:inline">AI 智慧出題即時連動</span>
+              </div>
+
+              {/* Grid of Preset Topics */}
+              <div className="space-y-3 mb-5">
+                <label className="block text-xs font-bold text-slate-700 tracking-wide uppercase flex items-center justify-between">
+                  <span>熱門學習主題選擇 (Select a Theme)</span>
+                  <span className="text-[11px] text-slate-400 font-normal">點擊即可設為首選</span>
+                </label>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {[
+                    {
+                      name: '🐶 動物與寵物',
+                      desc: '可愛動物與寵物單字 (dog, cat, lion, elephant)',
+                    },
+                    {
+                      name: '🚀 太空與宇宙',
+                      desc: '宇宙神祕探索英語 (rocket, planet, star, astronaut)',
+                    },
+                    {
+                      name: '⚽ 體育與運動',
+                      desc: '活力四射運動單字 (basketball, soccer, swimming, run)',
+                    },
+                    {
+                      name: '🍕 食物與美食',
+                      desc: '美味可口餐點英語 (pizza, apple, cake, milk, burger)',
+                    },
+                    {
+                      name: '🏰 奇幻與冒險',
+                      desc: '童話魔法故事英語 (dragon, castle, magic, knight)',
+                    },
+                    {
+                      name: '🤖 科技與機器人',
+                      desc: '未來科技遊戲單字 (robot, computer, science, AI)',
+                    },
+                    {
+                      name: '🌿 大自然與植物',
+                      desc: '美麗自然氣候單字 (tree, flower, sun, rain, mountain)',
+                    },
+                    {
+                      name: '🎨 藝術與音樂',
+                      desc: '美感音樂創作英語 (piano, paint, sing, dance, guitar)',
+                    }
+                  ].map((item) => {
+                    const isSelected = topicPreference === item.name;
+                    return (
+                      <div
+                        key={item.name}
+                        onClick={() => setTopicPreference && setTopicPreference(item.name)}
+                        className={`p-3 rounded-2xl border-2 transition-all cursor-pointer flex items-start justify-between gap-2 relative ${
+                          isSelected
+                            ? 'border-rose-500 bg-rose-50 shadow-xs scale-102'
+                            : 'border-slate-100 bg-slate-50/60 hover:bg-slate-100/80'
+                        }`}
+                      >
+                        <div>
+                          <div className="font-black text-xs text-slate-800 flex items-center gap-1">
+                            <span>{item.name}</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-0.5 leading-snug font-medium">
+                            {item.desc}
+                          </p>
+                        </div>
+
+                        {isSelected && (
+                          <div className="p-1 bg-rose-500 text-white rounded-full shrink-0 mt-0.5">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Custom Topic Input */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2 mb-5">
+                <label className="block text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <Palette className="w-4 h-4 text-purple-600" />
+                  <span>自訂專屬興趣主題 (Custom Topic Keyword)</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={customTopicInput}
+                    onChange={(e) => setCustomTopicInput(e.target.value)}
+                    placeholder="輸入你最愛的興趣（如：寶可夢、恐龍、汽車...）"
+                    className="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                  />
+                  <button
+                    onClick={() => {
+                      if (customTopicInput.trim() && setTopicPreference) {
+                        setTopicPreference(`✨ ${customTopicInput.trim()}`);
+                        setCustomTopicInput('');
+                      }
+                    }}
+                    disabled={!customTopicInput.trim()}
+                    className="bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-colors cursor-pointer shrink-0"
+                  >
+                    套用自訂
+                  </button>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                <div className="text-[11px] text-slate-500 font-medium">
+                  點擊【AI 智慧出題】時，系統將自動套用此喜好主題！
+                </div>
+                <button
+                  onClick={() => setTopicModalOpen(false)}
+                  className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  確認完成
                 </button>
               </div>
             </motion.div>

@@ -19,7 +19,13 @@ import {
   Zap,
   Check,
   X,
-  HelpCircle
+  HelpCircle,
+  Type,
+  BookOpen,
+  Headphones,
+  Layers,
+  Filter,
+  PlayCircle
 } from 'lucide-react';
 import {
   Radar,
@@ -40,6 +46,7 @@ interface MistakesViewProps {
   onClearAllMistakes: () => void;
   onStartRetest: (questions: Question[]) => void;
   onRequestAiExplanation: (question: Question, selectedOption: number) => void;
+  onOpenPronunciationModal?: (question?: Question, selectedOptionIndex?: number) => void;
 }
 
 export const MistakesView: React.FC<MistakesViewProps> = ({
@@ -49,9 +56,11 @@ export const MistakesView: React.FC<MistakesViewProps> = ({
   onUpdateMistake,
   onClearAllMistakes,
   onStartRetest,
-  onRequestAiExplanation
+  onRequestAiExplanation,
+  onOpenPronunciationModal
 }) => {
   const [viewMode, setViewMode] = useState<'all' | 'reinforcement'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'vocab' | 'grammar' | 'listening'>('all');
   const [userInputs, setUserInputs] = useState<Record<string, string>>({});
   const [feedback, setFeedback] = useState<Record<string, { isCorrect?: boolean; message?: string }>>({});
   const [successToast, setSuccessToast] = useState<string | null>(null);
@@ -60,9 +69,87 @@ export const MistakesView: React.FC<MistakesViewProps> = ({
     playSpeech(text, { rate: speechSpeed });
   };
 
+  // Helper to categorize mistakes into Vocabulary, Grammar, or Listening
+  const getMistakeCategoryType = (item: MistakeItem): 'vocab' | 'grammar' | 'listening' => {
+    const cat = (item.question.category || '').toLowerCase();
+    const qText = (item.question.question || '').toLowerCase();
+
+    // 1. Listening mistake
+    if (
+      cat.includes('聽力') ||
+      cat.includes('listening') ||
+      cat.includes('audio') ||
+      cat.includes('語音') ||
+      qText.includes('聽') ||
+      qText.includes('audio') ||
+      qText.includes('listen') ||
+      !!item.question.audioText
+    ) {
+      return 'listening';
+    }
+
+    // 2. Vocabulary mistake
+    if (
+      cat.includes('單字') ||
+      cat.includes('發音') ||
+      cat.includes('phonics') ||
+      cat.includes('vocab') ||
+      cat.includes('詞彙') ||
+      cat.includes('拼字') ||
+      cat.includes('字母')
+    ) {
+      return 'vocab';
+    }
+
+    // 3. Grammar mistake
+    if (
+      cat.includes('文法') ||
+      cat.includes('句型') ||
+      cat.includes('對話') ||
+      cat.includes('時態') ||
+      cat.includes('動詞') ||
+      cat.includes('介系詞') ||
+      cat.includes('代名詞') ||
+      cat.includes('grammar')
+    ) {
+      return 'grammar';
+    }
+
+    // Fallback heuristic: short questions tend to be vocab, longer ones grammar
+    return qText.length < 22 ? 'vocab' : 'grammar';
+  };
+
+  // Category counts
+  const categoryCounts = useMemo(() => {
+    let vocab = 0;
+    let grammar = 0;
+    let listening = 0;
+
+    mistakes.forEach((m) => {
+      const type = getMistakeCategoryType(m);
+      if (type === 'vocab') vocab++;
+      else if (type === 'grammar') grammar++;
+      else if (type === 'listening') listening++;
+    });
+
+    return { vocab, grammar, listening };
+  }, [mistakes]);
+
+  // Filtered mistakes list based on category filter
+  const filteredMistakes = useMemo(() => {
+    if (categoryFilter === 'all') return mistakes;
+    return mistakes.filter((m) => getMistakeCategoryType(m) === categoryFilter);
+  }, [mistakes, categoryFilter]);
+
   const handleRetestAll = () => {
     if (mistakes.length === 0) return;
     const questions = mistakes.map((m) => m.question);
+    onStartRetest(questions);
+  };
+
+  const handleRetestCurrentFilter = () => {
+    if (filteredMistakes.length === 0) return;
+    const questions = filteredMistakes.map((m) => m.question);
     onStartRetest(questions);
   };
 
@@ -265,6 +352,110 @@ export const MistakesView: React.FC<MistakesViewProps> = ({
             <Zap className="w-3.5 h-3.5 text-yellow-300 animate-pulse" />
             <span>🤖 AI 填空弱點補強 ({reinforcedMistakes.length})</span>
           </button>
+        </div>
+      )}
+
+      {/* Category Filter Switcher Tabs (Shown when there are mistakes in 'all' view) */}
+      {mistakes.length > 0 && viewMode === 'all' && (
+        <div className="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm mb-6 space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2 text-xs font-black text-slate-700">
+              <Filter className="w-4 h-4 text-indigo-600" />
+              <span>主題式錯題自動歸類切換器：</span>
+            </div>
+
+            {categoryFilter !== 'all' && filteredMistakes.length > 0 && (
+              <button
+                onClick={handleRetestCurrentFilter}
+                className="flex items-center gap-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl shadow-xs transition-all cursor-pointer"
+              >
+                <PlayCircle className="w-3.5 h-3.5 text-yellow-300" />
+                <span>
+                  一鍵重測『
+                  {categoryFilter === 'vocab'
+                    ? '單字錯誤'
+                    : categoryFilter === 'grammar'
+                    ? '文法錯誤'
+                    : '聽力錯誤'}
+                  』({filteredMistakes.length} 題)
+                </span>
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-bold">
+            {/* All */}
+            <button
+              onClick={() => setCategoryFilter('all')}
+              className={`p-3 rounded-2xl border transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                categoryFilter === 'all'
+                  ? 'bg-slate-900 text-white border-slate-900 shadow-md scale-102'
+                  : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+              }`}
+            >
+              <div className="flex items-center gap-1.5">
+                <Layers className={`w-4 h-4 ${categoryFilter === 'all' ? 'text-sky-300' : 'text-slate-500'}`} />
+                <span>全部錯題</span>
+              </div>
+              <span className={`text-[11px] ${categoryFilter === 'all' ? 'text-slate-300' : 'text-slate-500'}`}>
+                {mistakes.length} 題
+              </span>
+            </button>
+
+            {/* Vocab */}
+            <button
+              onClick={() => setCategoryFilter('vocab')}
+              className={`p-3 rounded-2xl border transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                categoryFilter === 'vocab'
+                  ? 'bg-amber-500 text-white border-amber-600 shadow-md scale-102'
+                  : 'bg-amber-50/70 hover:bg-amber-100/80 text-amber-900 border-amber-200'
+              }`}
+            >
+              <div className="flex items-center gap-1.5">
+                <Type className={`w-4 h-4 ${categoryFilter === 'vocab' ? 'text-yellow-100' : 'text-amber-600'}`} />
+                <span>🔤 單字錯誤</span>
+              </div>
+              <span className={`text-[11px] ${categoryFilter === 'vocab' ? 'text-amber-100' : 'text-amber-700'}`}>
+                {categoryCounts.vocab} 題
+              </span>
+            </button>
+
+            {/* Grammar */}
+            <button
+              onClick={() => setCategoryFilter('grammar')}
+              className={`p-3 rounded-2xl border transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                categoryFilter === 'grammar'
+                  ? 'bg-indigo-600 text-white border-indigo-700 shadow-md scale-102'
+                  : 'bg-indigo-50/70 hover:bg-indigo-100/80 text-indigo-900 border-indigo-200'
+              }`}
+            >
+              <div className="flex items-center gap-1.5">
+                <BookOpen className={`w-4 h-4 ${categoryFilter === 'grammar' ? 'text-indigo-200' : 'text-indigo-600'}`} />
+                <span>📖 文法錯誤</span>
+              </div>
+              <span className={`text-[11px] ${categoryFilter === 'grammar' ? 'text-indigo-200' : 'text-indigo-700'}`}>
+                {categoryCounts.grammar} 題
+              </span>
+            </button>
+
+            {/* Listening */}
+            <button
+              onClick={() => setCategoryFilter('listening')}
+              className={`p-3 rounded-2xl border transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                categoryFilter === 'listening'
+                  ? 'bg-rose-500 text-white border-rose-600 shadow-md scale-102'
+                  : 'bg-rose-50/70 hover:bg-rose-100/80 text-rose-900 border-rose-200'
+              }`}
+            >
+              <div className="flex items-center gap-1.5">
+                <Headphones className={`w-4 h-4 ${categoryFilter === 'listening' ? 'text-rose-100' : 'text-rose-600'}`} />
+                <span>🎧 聽力錯誤</span>
+              </div>
+              <span className={`text-[11px] ${categoryFilter === 'listening' ? 'text-rose-100' : 'text-rose-700'}`}>
+                {categoryCounts.listening} 題
+              </span>
+            </button>
+          </div>
         </div>
       )}
 
@@ -521,89 +712,150 @@ export const MistakesView: React.FC<MistakesViewProps> = ({
       ) : (
         /* Classic All Mistakes List View */
         <div className="space-y-4">
-          {mistakes.map((item) => {
-            const q = item.question;
-            const userSelectedText = q.options[item.selectedOption] || '未選擇';
-            const correctText = q.options[q.answerIndex];
-            const isAutoReinforced = item.autoReinforced || (item.wrongCount && item.wrongCount >= 2);
-
-            return (
-              <div
-                key={item.id}
-                className="bg-white rounded-3xl border border-rose-100 p-5 shadow-xs hover:shadow-md transition-all relative group"
+          {filteredMistakes.length === 0 ? (
+            <div className="bg-white rounded-3xl p-10 text-center border border-slate-200">
+              <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto mb-2" />
+              <h3 className="font-bold text-slate-800 text-base">此分類目前沒有任何錯題！</h3>
+              <p className="text-xs text-slate-500 mt-1 mb-4">
+                你在『
+                {categoryFilter === 'vocab'
+                  ? '單字錯誤'
+                  : categoryFilter === 'grammar'
+                  ? '文法錯誤'
+                  : '聽力錯誤'}
+                』領域表現非常優異！可以切換至其他分類進行複習。
+              </p>
+              <button
+                onClick={() => setCategoryFilter('all')}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition-colors cursor-pointer"
               >
-                <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-rose-700 bg-rose-50 px-3 py-1 rounded-full border border-rose-200">
-                      {q.category}
-                    </span>
+                查看全部錯題 ({mistakes.length} 題)
+              </button>
+            </div>
+          ) : (
+            filteredMistakes.map((item) => {
+              const q = item.question;
+              const userSelectedText = q.options[item.selectedOption] || '未選擇';
+              const correctText = q.options[q.answerIndex];
+              const isAutoReinforced = item.autoReinforced || (item.wrongCount && item.wrongCount >= 2);
+              const catType = getMistakeCategoryType(item);
 
-                    {isAutoReinforced && (
-                      <span className="text-[11px] font-black text-purple-800 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-200 flex items-center gap-1">
-                        <Zap className="w-3 h-3 text-purple-600" />
-                        <span>已開啟填空補強 ({item.fillInBlankPracticeCount || 0}/3)</span>
+              return (
+                <div
+                  key={item.id}
+                  className="bg-white dark:bg-slate-900 border border-rose-100 dark:border-slate-800 p-5 shadow-xs hover:shadow-md transition-all relative group rounded-3xl"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                    <div className="flex items-center gap-2">
+                      {/* Auto Category Tag */}
+                      <span
+                        className={`text-xs font-black px-3 py-1 rounded-full border flex items-center gap-1 ${
+                          catType === 'vocab'
+                            ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 border-amber-200 dark:border-amber-800'
+                            : catType === 'grammar'
+                            ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-900 dark:text-indigo-200 border-indigo-200 dark:border-indigo-800'
+                            : 'bg-rose-50 dark:bg-rose-950/60 text-rose-900 dark:text-rose-200 border-rose-200 dark:border-rose-800'
+                        }`}
+                      >
+                        {catType === 'vocab' ? (
+                          <>
+                            <Type className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                            <span>🔤 單字錯題</span>
+                          </>
+                        ) : catType === 'grammar' ? (
+                          <>
+                            <BookOpen className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
+                            <span>📖 文法錯題</span>
+                          </>
+                        ) : (
+                          <>
+                            <Headphones className="w-3 h-3 text-rose-600 dark:text-rose-400" />
+                            <span>🎧 聽力錯題</span>
+                          </>
+                        )}
                       </span>
-                    )}
+
+                      <span className="text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full border border-slate-200 dark:border-slate-700">
+                        {q.category}
+                      </span>
+
+                      {isAutoReinforced && (
+                        <span className="text-[11px] font-black text-purple-800 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-2.5 py-0.5 rounded-full border border-purple-200 dark:border-purple-800 flex items-center gap-1">
+                          <Zap className="w-3 h-3 text-purple-600 dark:text-purple-400" />
+                          <span>已開啟填空補強 ({item.fillInBlankPracticeCount || 0}/3)</span>
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {!isAutoReinforced && (
+                        <button
+                          onClick={() => handleEnableReinforcement(item)}
+                          className="p-1.5 bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                          title="手動轉換為填空弱點補強題"
+                        >
+                          <Zap className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                          <span>轉為填空補強</span>
+                        </button>
+                      )}
+
+                      {(q.audioText || q.question) && (
+                        <button
+                          onClick={() => handlePlayAudio(q.audioText || q.question)}
+                          className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Volume2 className="w-3.5 h-3.5" /> 發音
+                        </button>
+                      )}
+                      <button
+                        onClick={() => onRemoveMistake(item.id)}
+                        className="text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 p-1.5 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                        title="移除此題目（已學會）"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    {!isAutoReinforced && (
-                      <button
-                        onClick={() => handleEnableReinforcement(item)}
-                        className="p-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
-                        title="手動轉換為填空弱點補強題"
-                      >
-                        <Zap className="w-3.5 h-3.5 text-purple-600" />
-                        <span>轉為填空補強</span>
-                      </button>
-                    )}
+                  <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 mb-3">{q.question}</h3>
 
-                    {(q.audioText || q.question) && (
-                      <button
-                        onClick={() => handlePlayAudio(q.audioText || q.question)}
-                        className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer"
-                      >
-                        <Volume2 className="w-3.5 h-3.5" /> 發音
-                      </button>
-                    )}
+                  {/* Answers breakdown */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3 text-xs">
+                    <div className="bg-rose-50/70 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 p-2.5 rounded-xl text-rose-900 dark:text-rose-200 font-medium">
+                      ❌ 你的選擇：<strong>{userSelectedText}</strong>
+                    </div>
+                    <div className="bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 p-2.5 rounded-xl text-emerald-900 dark:text-emerald-200 font-medium">
+                      ✅ 正確答案：<strong>{correctText}</strong>
+                    </div>
+                  </div>
+
+                  {/* Teacher Explanation */}
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl text-xs text-slate-700 dark:text-slate-300 leading-relaxed mb-3">
+                    <strong>解析：</strong>{q.explanation}
+                  </div>
+
+                  {/* AI Diagnosis Action Buttons */}
+                  <div className="flex flex-wrap gap-2">
                     <button
-                      onClick={() => onRemoveMistake(item.id)}
-                      className="text-slate-400 hover:text-rose-600 p-1.5 rounded-xl hover:bg-rose-50 transition-colors cursor-pointer"
-                      title="移除此題目（已學會）"
+                      onClick={() => onRequestAiExplanation(q, item.selectedOption)}
+                      className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>請 AI 小老師詳細診斷</span>
+                    </button>
+
+                    <button
+                      onClick={() => onOpenPronunciationModal?.(q, item.selectedOption)}
+                      className="flex items-center gap-1.5 text-xs font-black text-rose-700 hover:text-rose-900 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
+                    >
+                      <Headphones className="w-3.5 h-3.5 text-rose-600" />
+                      <span>🎧 AI 發音問題辨析</span>
                     </button>
                   </div>
                 </div>
-
-                <h3 className="text-base font-bold text-slate-800 mb-3">{q.question}</h3>
-
-                {/* Answers breakdown */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3 text-xs">
-                  <div className="bg-rose-50/70 border border-rose-200 p-2.5 rounded-xl text-rose-900 font-medium">
-                    ❌ 你的選擇：<strong>{userSelectedText}</strong>
-                  </div>
-                  <div className="bg-emerald-50/70 border border-emerald-200 p-2.5 rounded-xl text-emerald-900 font-medium">
-                    ✅ 正確答案：<strong>{correctText}</strong>
-                  </div>
-                </div>
-
-                {/* Teacher Explanation */}
-                <div className="bg-slate-50 p-3 rounded-2xl text-xs text-slate-700 leading-relaxed mb-3">
-                  <strong>解析：</strong>{q.explanation}
-                </div>
-
-                {/* AI Explanation Request Button */}
-                <button
-                  onClick={() => onRequestAiExplanation(q, item.selectedOption)}
-                  className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                  請 AI 小老師詳細診斷
-                </button>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       )}
     </div>

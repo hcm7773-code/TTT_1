@@ -35,7 +35,7 @@ jobs:
         run: npm ci || npm install
 
       - name: Build static site
-        run: npx vite build
+        run: npm run build:gh-pages
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
